@@ -12,6 +12,10 @@ description: >
 compatibility: >
   Requires Java 21+, Maven 3.9+, Docker (for DevServices/Testcontainers).
   Works with Claude Code and Claude.ai.
+license: MIT
+metadata:
+  author: Archton
+  version: 1.1.0
 ---
 
 # Quarkus Expert Skill

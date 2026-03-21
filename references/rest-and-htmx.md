@@ -314,6 +314,8 @@ if you access a property that doesn't exist on the data object.
 | `hx-sync="closest form:abort"` | Coordinate concurrent requests (abort, queue, drop, replace) |
 | `hx-encoding="multipart/form-data"` | Required for file uploads |
 | `hx-disabled-elt="this"` | Disable element(s) during the request (prevents double-submit) |
+| `hx-preserve="true"` | Keep element unchanged across swaps (e.g., video player, scroll position) |
+| `hx-params="*"` | Control which params are submitted (`*`, `none`, `not field1`, `field1,field2`) |
 
 ### Swap strategies
 
@@ -367,7 +369,12 @@ hx-trigger="click from:#other-element"    <!-- listen on a different element -->
 hx-trigger="click target:#child"          <!-- only from a specific child -->
 hx-trigger="click consume"                <!-- stop event propagation -->
 hx-trigger="click once"                   <!-- fire only once -->
+hx-trigger="click[ctrlKey]"              <!-- event filter: only on Ctrl+click -->
+hx-trigger="keyup[key=='Enter']"         <!-- event filter: only on Enter key -->
 ```
+
+**Event filters** use JS expressions in `[]` evaluated against the event object. Use for
+keyboard shortcuts, modifier keys, or conditional triggers without extra JavaScript.
 
 **Always debounce expensive triggers** (search, typeahead). Prefer `delay:` over `throttle:` for input fields.
 Prefer SSE over `every` polling when real-time updates are needed.
@@ -640,6 +647,22 @@ public Multi<String> stream() {
 ```
 
 Add `htmx-ext-sse` script after HTMX.
+
+**WebSocket alternative** — use `hx-ext="ws"` when bidirectional communication is needed
+(e.g., chat). SSE is simpler and sufficient for server-to-client push (notifications,
+live dashboards). Prefer SSE unless clients need to send messages over the same connection.
+
+```html
+<div hx-ext="ws" ws-connect="/ws/chat">
+  <div id="messages"></div>
+  <form ws-send>
+    <input name="message">
+    <button type="submit">Send</button>
+  </form>
+</div>
+```
+
+Add `htmx-ext-ws` script after HTMX.
 
 ---
 
