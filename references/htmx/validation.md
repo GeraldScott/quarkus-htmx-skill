@@ -67,12 +67,16 @@ public class ValidationExceptionMapper
 
 ### Generic HTMX-Aware Validation Mapper
 
-For reusable validation across multiple resources:
+For reusable validation across multiple resources, use a Qute template to render
+errors safely (never construct HTML via string concatenation -- Qute auto-escapes
+all variables, preventing XSS):
 
 ```java
 @Provider
 public class HtmxValidationMapper
     implements ExceptionMapper<ConstraintViolationException> {
+
+    @Inject Template validationErrors; // templates/validationErrors.html
 
     @Override
     public Response toResponse(ConstraintViolationException ex) {
@@ -80,16 +84,23 @@ public class HtmxValidationMapper
             .map(ConstraintViolation::getMessage)
             .toList();
 
-        String errorHtml = errors.stream()
-            .map(e -> "<p class=\"error\">" + e + "</p>")
-            .collect(Collectors.joining());
+        String html = validationErrors.data("errors", errors).render();
 
         return Response.status(422)
             .type(MediaType.TEXT_HTML)
-            .entity("<div class=\"errors\" role=\"alert\">" + errorHtml + "</div>")
+            .entity(html)
             .build();
     }
 }
+```
+
+```html
+{! templates/validationErrors.html !}
+<div class="errors" role="alert">
+  {#for error in errors}
+    <p class="error">{error}</p>
+  {/for}
+</div>
 ```
 
 ### Qute Template for Form with Errors
@@ -151,7 +162,9 @@ public Response create(@Valid @BeanParam CreateTodoRequest req) {
 
 ## Inline Field Validation
 
-Validate individual fields as the user types by hitting a Quarkus endpoint:
+Validate individual fields as the user types by hitting a Quarkus endpoint.
+For email validation, prefer `@Email` from Bean Validation over hand-rolled
+regex (avoids ReDoS risk and handles edge cases correctly):
 
 ```html
 <input type="email" name="email"
@@ -171,7 +184,9 @@ public class ValidationResource {
     @GET
     @Path("/email")
     @Produces(MediaType.TEXT_HTML)
-    public Response validateEmail(@QueryParam("email") String email) {
+    public Response validateEmail(
+        @QueryParam("email") @Size(max = 254) String email
+    ) {
         if (email == null || !email.matches("^[\\w.+%-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
             return Response.ok("<span class=\"error\">Invalid email address</span>")
                 .build();

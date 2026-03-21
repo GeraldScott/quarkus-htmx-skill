@@ -330,8 +330,8 @@ Dev Services automatically starts backing services (databases, brokers, etc.) in
 | `quarkus.datasource.devservices.image-name` | extension default | A specific container image version is required |
 | `quarkus.datasource.devservices.port` | random | A fixed port is needed for external tool access |
 | `quarkus.datasource.devservices.db-name` | `quarkus` | The dev database name should differ from the default |
-| `quarkus.datasource.devservices.username` | `quarkus` | Custom credentials are needed |
-| `quarkus.datasource.devservices.password` | `quarkus` | Custom credentials are needed |
+| `quarkus.datasource.devservices.username` | `quarkus` | Custom credentials are needed (dev/test only) |
+| `quarkus.datasource.devservices.password` | `quarkus` | Custom credentials are needed (dev/test only) |
 | `quarkus.datasource.devservices.init-script-path` | - | A SQL script should seed the dev database on startup |
 | `quarkus.datasource.devservices.volumes` | - | Host paths should be mounted into the container |
 | `quarkus.datasource.devservices.container-env` | - | Extra environment variables should be passed to the container |
@@ -377,3 +377,40 @@ quarkus image push --registry=<registry> --registry-username=<username> --regist
 ```
 
 Prefer stdin-driven secrets to avoid exposing passwords in command history.
+
+## Dependency Vulnerability Scanning
+
+Check dependencies for known CVEs. Run in CI to catch vulnerable transitive
+dependencies before they reach production.
+
+### OWASP Dependency-Check (Maven)
+
+Add to `pom.xml`:
+
+```xml
+<plugin>
+    <groupId>org.owasp</groupId>
+    <artifactId>dependency-check-maven</artifactId>
+    <version>10.0.3</version>
+    <executions>
+        <execution>
+            <goals><goal>check</goal></goals>
+        </execution>
+    </executions>
+    <configuration>
+        <!-- Fail the build on CVSS >= 7 (high severity) -->
+        <failBuildOnCVSS>7</failBuildOnCVSS>
+    </configuration>
+</plugin>
+```
+
+Run manually:
+
+```bash
+./mvnw org.owasp:dependency-check-maven:check
+```
+
+DevServices credentials (`quarkus.datasource.devservices.username/password`)
+are only active in dev and test mode. For production, always use environment
+variable placeholders (`${DB_USER}`, `${DB_PASSWORD}`) and never commit
+credentials to version control.

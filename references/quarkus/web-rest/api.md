@@ -105,8 +105,8 @@ class CartResource {
     @Produces(MediaType.TEXT_HTML)
     @Transactional
     public TemplateInstance addToCart(
-        @FormParam("productId") Long productId,
-        @FormParam("quantity") int quantity
+        @FormParam("productId") @NotNull Long productId,
+        @FormParam("quantity") @Min(1) @Max(999) int quantity
     ) {
         Cart cart = cartService.add(productId, quantity);
         return cartFragment.data("cart", cart);
@@ -114,7 +114,7 @@ class CartResource {
 }
 ```
 
-Use `@FormParam` with `@Consumes(MediaType.APPLICATION_FORM_URLENCODED)` for standard HTML form posts. This is the primary pattern for HTMX `hx-post` endpoints that submit form fields.
+Use `@FormParam` with `@Consumes(MediaType.APPLICATION_FORM_URLENCODED)` for standard HTML form posts. This is the primary pattern for HTMX `hx-post` endpoints that submit form fields. Always add Bean Validation constraints (`@NotNull`, `@NotBlank`, `@Size`, `@Min`, `@Max`) to form parameters -- never trust client-side validation alone.
 
 ## Typed responses
 
@@ -146,10 +146,27 @@ class UploadResource {
         public String owner;
     }
 
+    private static final Set<String> ALLOWED_TYPES = Set.of(
+        "image/png", "image/jpeg", "application/pdf");
+
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
-    void upload(@RestForm("file") FileUpload file,
-                @RestForm @PartType(MediaType.APPLICATION_JSON) Metadata metadata) {
+    Response upload(@RestForm("file") FileUpload file,
+                    @RestForm @PartType(MediaType.APPLICATION_JSON) Metadata metadata) {
+        // Validate file size (also set quarkus.http.limits.max-body-size)
+        if (file.size() > 5_000_000) {
+            return Response.status(413).entity("File too large (max 5 MB)").build();
+        }
+        // Validate content type against allowlist
+        if (!ALLOWED_TYPES.contains(file.contentType())) {
+            return Response.status(415).entity("Unsupported file type").build();
+        }
+        // Sanitize filename -- strip path components to prevent traversal
+        String safeName = java.nio.file.Path.of(file.fileName())
+            .getFileName().toString();
+        // Store outside the web root
+        java.nio.file.Files.copy(file.filePath(), uploadDir.resolve(safeName));
+        return Response.ok().build();
     }
 }
 ```

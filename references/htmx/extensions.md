@@ -91,6 +91,7 @@ data: <div>3 new notifications</div>
 public class SseResource {
 
     @Inject EventBus eventBus;
+    @Inject Template notification; // templates/notification.html
 
     @GET
     @Path("/stream")
@@ -101,7 +102,7 @@ public class SseResource {
             .bodyStream()
             .map(msg -> SseEvent.<String>builder()
                 .name("notification")
-                .data("<div class=\"notification\">" + msg + "</div>")
+                .data(notification.data("message", msg).render())
                 .build());
     }
 }
@@ -136,8 +137,12 @@ Bidirectional communication:
 
 #### Quarkus WebSocket Endpoint
 
+WebSocket endpoints require authentication -- without it, any client can connect
+and broadcast to all users. Use a `Configurator` to verify the session cookie
+or token during the handshake:
+
 ```java
-@ServerEndpoint("/chat")
+@ServerEndpoint(value = "/chat", configurator = AuthConfigurator.class)
 @ApplicationScoped
 public class ChatSocket {
 
@@ -153,6 +158,10 @@ public class ChatSocket {
         // Parse htmx ws-send JSON: {"message": "hello", "HEADERS": {...}}
         JsonObject json = Json.createReader(new StringReader(message)).readObject();
         String text = json.getString("message", "");
+        // Enforce max message length to prevent abuse
+        if (text.length() > 2000) {
+            text = text.substring(0, 2000);
+        }
         String html = "<div id=\"messages\" hx-swap-oob=\"beforeend\">"
             + "<p>" + htmlEscape(text) + "</p></div>";
         broadcast(html);
@@ -166,6 +175,25 @@ public class ChatSocket {
     private void broadcast(String html) {
         sessions.values().forEach(s ->
             s.getAsyncRemote().sendText(html));
+    }
+}
+
+public class AuthConfigurator extends ServerEndpointConfig.Configurator {
+    @Override
+    public boolean checkOrigin(String originHeaderValue) {
+        // Reject cross-origin WebSocket connections
+        return originHeaderValue.equals("https://yourdomain.com");
+    }
+
+    @Override
+    public void modifyHandshake(ServerEndpointConfig sec,
+                                HandshakeRequest request,
+                                HandshakeResponse response) {
+        // Verify session cookie is present and valid during upgrade
+        List<String> cookies = request.getHeaders().get("Cookie");
+        if (cookies == null || !isValidSession(cookies)) {
+            throw new RuntimeException("Unauthorized WebSocket connection");
+        }
     }
 }
 ```

@@ -169,7 +169,9 @@ Expressions rooted at `item` and `tags` are validated at build time.
 {! Variable output -- auto HTML-escaped !}
 {product.name}
 
-{! Raw (unescaped) output -- use carefully !}
+{! Raw (unescaped) output -- SECURITY WARNING: .raw bypasses HTML escaping. !}
+{! Never use .raw on user-supplied or untrusted data -- it enables XSS.     !}
+{! Only use for content you fully control, such as pre-sanitized HTML.      !}
 {product.description.raw}
 
 {! Conditional !}

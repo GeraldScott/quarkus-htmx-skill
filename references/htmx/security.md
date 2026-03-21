@@ -2,7 +2,9 @@
 
 ## CSRF Protection
 
-Every mutating HTMX request (POST, PUT, PATCH, DELETE) needs CSRF protection.
+Every mutating HTMX request (POST, PUT, PATCH, DELETE) **must** have CSRF
+protection. This is not optional -- without it, any external site can submit
+forms on behalf of authenticated users.
 
 ### Quarkus CSRF Reactive Setup
 
@@ -20,14 +22,18 @@ Configure in `application.properties`:
 ```properties
 quarkus.csrf-reactive.enabled=true
 quarkus.csrf-reactive.token-header-name=X-CSRF-TOKEN
+# SameSite=STRICT prevents the cookie from being sent on cross-origin requests
+quarkus.csrf-reactive.cookie-same-site=STRICT
 ```
 
 ### Via meta tag + htmx:configRequest (recommended)
 
-Inject the CSRF token into your base Qute template and attach it to every HTMX request:
+Inject the CSRF token into your base Qute template and attach it to every HTMX
+request. The `htmx:configRequest` listener fires on *all* HTMX requests, so the
+token is sent automatically for every POST/PUT/PATCH/DELETE:
 
 ```html
-{! base.html !}
+{! base.html -- include this on EVERY page, not just form pages !}
 <meta name="csrf-token" content="{inject:csrf.token}">
 <script>
   document.addEventListener('htmx:configRequest', function(e) {
@@ -39,12 +45,19 @@ Inject the CSRF token into your base Qute template and attach it to every HTMX r
 
 ### Via hidden field in forms
 
+The hidden field name **must** match the server-expected form field name (not
+the header name). By default `quarkus-csrf-reactive` accepts the token from
+either the header (`X-CSRF-TOKEN`) or a form field named `csrf-token`:
+
 ```html
 <form hx-post="/ui/todos">
   <input type="hidden" name="csrf-token" value="{inject:csrf.token}">
   {! form fields !}
 </form>
 ```
+
+The meta tag approach above is preferred because it covers all HTMX requests
+(including `hx-delete`, `hx-put`, etc.) without modifying each form.
 
 ## Input Sanitization
 
@@ -99,13 +112,19 @@ requests. Only disable this if you explicitly need cross-origin HTMX requests.
 ## Content Security Policy
 
 htmx uses `eval()` for `hx-on:*` attributes and trigger filter expressions.
-If you use CSP:
+**Prefer the CSP-compatible approach** to avoid weakening your CSP:
 
-- Add `'unsafe-eval'` to `script-src`, OR
-- Use the htmx CSP-compatible build (disables eval-dependent features)
-- Set `htmx.config.allowEval = false` to disable eval features
+1. **Recommended:** Use the htmx CSP-compatible build (`htmx.csp.js`) and set
+   `htmx.config.allowEval = false`. This disables `hx-on:*` inline handlers and
+   trigger filters that depend on eval, but all other htmx features work normally.
+2. **Fallback:** If you need `hx-on:*` or eval-based trigger filters, add
+   `'unsafe-eval'` to `script-src`. Be aware this significantly weakens XSS
+   protection.
 
-Set CSP headers via a Quarkus HTTP filter:
+### Security headers filter (recommended)
+
+Set CSP alongside other security headers. Use a `ContainerResponseFilter` to
+ensure all responses include them:
 
 ```java
 @Provider
@@ -113,10 +132,18 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
 
     @Override
     public void filter(ContainerRequestContext req, ContainerResponseContext res) {
-        res.getHeaders().putSingle("Content-Security-Policy",
+        var headers = res.getHeaders();
+        headers.putSingle("Content-Security-Policy",
             "default-src 'self'; " +
-            "script-src 'self' 'unsafe-eval' https://unpkg.com; " +
+            "script-src 'self'; " +
             "style-src 'self' 'unsafe-inline'");
+        headers.putSingle("Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains");
+        headers.putSingle("X-Content-Type-Options", "nosniff");
+        headers.putSingle("X-Frame-Options", "DENY");
+        headers.putSingle("Referrer-Policy", "strict-origin-when-cross-origin");
+        headers.putSingle("Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()");
     }
 }
 ```
@@ -124,30 +151,46 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
 Or configure via `application.properties`:
 
 ```properties
-quarkus.http.header."Content-Security-Policy".value=default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline'
+quarkus.http.header."Content-Security-Policy".value=default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+quarkus.http.header."Strict-Transport-Security".value=max-age=31536000; includeSubDomains
+quarkus.http.header."X-Content-Type-Options".value=nosniff
+quarkus.http.header."X-Frame-Options".value=DENY
+quarkus.http.header."Referrer-Policy".value=strict-origin-when-cross-origin
+quarkus.http.header."Permissions-Policy".value=camera=(), microphone=(), geolocation=()
 ```
 
 ## Rate Limiting
 
-Use the `quarkus-rate-limiter` extension or implement a filter:
+Use per-IP rate limiting to prevent brute-force and abuse. A single global
+bucket is insufficient -- it lets one attacker exhaust the limit for all users.
 
 ```java
 @Provider
 @Priority(Priorities.AUTHENTICATION + 1)
 public class RateLimitFilter implements ContainerRequestFilter {
 
-    private final RateLimiter limiter = RateLimiter.create(100); // 100 req/sec
+    // Per-IP: max 100 requests per minute, auto-expires idle entries
+    private final Cache<String, AtomicInteger> counters = CacheBuilder.newBuilder()
+        .expireAfterWrite(1, TimeUnit.MINUTES)
+        .build();
 
     @Override
-    public void filter(ContainerRequestContext ctx) {
-        if (!limiter.tryAcquire()) {
+    public void filter(ContainerRequestContext ctx) throws IOException {
+        String clientIp = ((HttpServerRequest) ctx.getProperty("io.vertx.ext.web.RoutingContext"))
+            .remoteAddress().host();
+        AtomicInteger count = counters.get(clientIp, AtomicInteger::new);
+        if (count.incrementAndGet() > 100) {
             ctx.abortWith(Response.status(429)
+                .header("Retry-After", "60")
                 .entity("Too many requests, please try again later.")
                 .build());
         }
     }
 }
 ```
+
+For production, consider a distributed rate limiter backed by Redis or use a
+reverse proxy (nginx, Envoy) for rate limiting at the edge.
 
 ## History Security
 
@@ -159,12 +202,40 @@ Prevent sensitive pages from being cached in htmx's localStorage history:
 </div>
 ```
 
+## Security Logging
+
+Log security-relevant events for monitoring and incident response. Mask
+sensitive data (passwords, tokens, PII) in log output:
+
+```java
+@ApplicationScoped
+public class SecurityEventLogger {
+
+    private static final Logger LOG = Logger.getLogger(SecurityEventLogger.class);
+
+    public void onAuthFailure(@Observes AuthenticationFailedEvent event) {
+        LOG.warnf("AUTH_FAILURE request=%s", event.getAuthenticationRequest());
+    }
+
+    public void onForbidden(@Observes AuthorizationFailureEvent event) {
+        LOG.warnf("ACCESS_DENIED user=%s resource=%s",
+            event.getSecurityIdentity().getPrincipal().getName(),
+            event.getAuthorizationContext());
+    }
+}
+```
+
+Never log passwords, CSRF tokens, session IDs, or full credit card numbers.
+
 ## General Rules
 
 - Validate all input on the server (Bean Validation + custom checks)
 - Qute auto-escapes HTML output -- never use `.raw` on untrusted data
-- Use HTTPS in production
+- Use HTTPS in production (`quarkus.http.insecure-requests=redirect`)
 - Validate content types
 - Use `hx-disable` on user-generated content containers
-- Set appropriate CORS headers if needed (Quarkus CORS filter in application.properties)
-- Enable CSRF protection for all state-changing endpoints
+- Set CORS origins explicitly -- never use wildcard with credentials
+- Enable CSRF protection for all state-changing endpoints (mandatory, not optional)
+- Set all security headers (HSTS, X-Content-Type-Options, X-Frame-Options, CSP)
+- Log authentication failures and access denials for monitoring
+- Run dependency vulnerability scanning in CI (see `references/quarkus/tooling/`)

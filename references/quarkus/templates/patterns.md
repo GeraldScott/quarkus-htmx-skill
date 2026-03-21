@@ -304,19 +304,22 @@ return cartRow
 
 When to use:
 
-- HTMX forms need CSRF token protection.
+- **Every** HTMX application with mutating endpoints (POST, PUT, PATCH, DELETE).
+  This is mandatory, not optional -- without CSRF protection, external sites can
+  submit requests on behalf of authenticated users.
 
 Configuration:
 
 ```properties
-quarkus.http.csrf.enabled=true
-quarkus.http.csrf.token-header-name=X-CSRF-TOKEN
+quarkus.csrf-reactive.enabled=true
+quarkus.csrf-reactive.token-header-name=X-CSRF-TOKEN
+quarkus.csrf-reactive.cookie-same-site=STRICT
 ```
 
-Base template:
+Base template (include on every page):
 
 ```html
-<meta name="csrf-token" content="{csrf}">
+<meta name="csrf-token" content="{inject:csrf.token}">
 <script>
   document.addEventListener('htmx:configRequest', (e) => {
     e.detail.headers['X-CSRF-TOKEN'] =
@@ -324,6 +327,9 @@ Base template:
   });
 </script>
 ```
+
+See `references/htmx/security.md` for full CSRF guidance including the hidden
+field approach and troubleshooting.
 
 ## Pattern: Server-Sent Events with HTMX
 

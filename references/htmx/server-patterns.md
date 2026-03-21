@@ -179,6 +179,7 @@ Stream real-time updates using Server-Sent Events:
 public class EventResource {
 
     @Inject EventBus eventBus;
+    @Inject Template notification; // templates/notification.html
 
     @GET
     @Path("/stream")
@@ -187,9 +188,14 @@ public class EventResource {
     public Multi<String> stream() {
         return eventBus.<String>consumer("updates")
             .bodyStream()
-            .map(msg -> "<div class=\"notification\">" + msg + "</div>");
+            .map(msg -> notification.data("message", msg).render());
     }
 }
+```
+
+```html
+{! templates/notification.html -- Qute auto-escapes {message}, preventing XSS !}
+<div class="notification">{message}</div>
 ```
 
 ```html

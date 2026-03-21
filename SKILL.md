@@ -119,6 +119,9 @@ What do you need?
 +-- Scheduled and recurring jobs (@Scheduled, cron, Quartz)
 |   +-- references/quarkus/scheduler/
 |
++-- Authentication, authorization, RBAC, IDOR, security headers
+|   +-- references/quarkus/security/
+|
 +-- Testing (@QuarkusTest, mocking, test profiles, Dev Services)
 |   +-- references/quarkus/testing/
 |
@@ -189,7 +192,9 @@ public class ItemUiResource {
 
     @POST @Transactional
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    public TemplateInstance create(@FormParam("name") String name) {
+    public TemplateInstance create(
+        @FormParam("name") @NotBlank @Size(max = 255) String name
+    ) {
         Item item = itemService.create(name);
         return items$row.data("item", item);
     }
@@ -301,5 +306,6 @@ CREATE TABLE items (
 - `cdi-events/` -- Event/Observes, async observers, transactional observers
 - `scheduler/` -- @Scheduled, cron, Quartz, programmatic scheduling
 - `vertx-event-bus/` -- @ConsumeEvent, EventBus, publish/subscribe
+- `security/` -- authentication, authorization, RBAC, IDOR, CSRF, security headers, OIDC
 - `testing/` -- @QuarkusTest, @InjectMock, Dev Services, HTMX endpoint tests
 - `tooling/` -- CLI, Dev Mode, DevServices, build plugins, native compilation
