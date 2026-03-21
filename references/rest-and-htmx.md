@@ -58,23 +58,41 @@ public class ProductResource {
 
 ### Exception mapping
 
-```java
-@Provider
-public class AppExceptionMapper implements ExceptionMapper<AppException> {
+Use `@ServerExceptionMapper` (Quarkus-native, simpler than the JAX-RS `ExceptionMapper` interface):
 
-    @Override
-    public Response toResponse(AppException ex) {
+```java
+@ApplicationScoped
+public class ExceptionMappers {
+
+    @ServerExceptionMapper
+    public Response handleAppException(AppException ex) {
         return Response.status(ex.getStatus())
             .entity(new ErrorResponse(ex.getMessage()))
             .build();
     }
+
+    @ServerExceptionMapper
+    public Response handleConstraintViolation(ConstraintViolationException ex) {
+        var errors = ex.getConstraintViolations().stream()
+            .map(v -> v.getPropertyPath() + ": " + v.getMessage())
+            .toList();
+        return Response.status(400).entity(new ErrorResponse(errors)).build();
+    }
 }
 ```
 
-Quarkus automatically maps common exceptions:
+Quarkus also automatically maps common exceptions without any mapper:
 - `NotFoundException` → 404
 - `BadRequestException` → 400
-- `javax.validation.ConstraintViolationException` → 400 (with validation details)
+
+For HTMX endpoints, return an error fragment instead of JSON:
+
+```java
+@ServerExceptionMapper
+public TemplateInstance handleNotFound(NotFoundException ex) {
+    return error.data("message", ex.getMessage()).data("status", 404);
+}
+```
 
 ### DTO with Java Records (preferred)
 
@@ -208,6 +226,44 @@ and to a `$` in the filename for same-directory fragments.
 {/content}
 ```
 
+### Inline fragments (Qute 3.x+ — preferred over file-based `$` fragments)
+
+Define fragments directly inside a template with `{#fragment}`. This keeps the full
+page and its HTMX partials in one file, avoiding fragment file sprawl.
+
+```html
+<!-- templates/products.html -->
+{#include base.html}
+{#content}
+<h1>Products</h1>
+<div id="product-list">
+  {#for p in products}
+    {#fragment id=row}
+    <tr id="product-{p.id}">
+      <td>{p.name}</td>
+      <td>{p.price}</td>
+    </tr>
+    {/fragment}
+  {/for}
+</div>
+{/content}
+```
+
+Reference the fragment from Java with `$` notation — Quarkus resolves it to the
+`{#fragment id=row}` inside `products.html`:
+
+```java
+@CheckedTemplate
+public class Templates {
+    public static native TemplateInstance products(List<ProductDto> products);
+    public static native TemplateInstance products$row(ProductDto p);   // the {#fragment id=row}
+}
+```
+
+**When to use inline vs. file fragments:**
+- **Inline `{#fragment}`** — default choice. Template and fragment live together, easier to maintain.
+- **Separate `$` file** — use when the fragment is shared across multiple templates.
+
 ### Type-safe templates (recommended for production)
 
 ```java
@@ -244,6 +300,11 @@ if you access a property that doesn't exist on the data object.
 | `hx-confirm="Sure?"` | Confirmation dialog before request |
 | `hx-vals='{"key":"val"}'` | Extra values to submit |
 | `hx-headers='{"X-Key":"val"}'` | Extra request headers |
+| `hx-select=".result"` | Pick a CSS selector from the response to swap (ignore the rest) |
+| `hx-select-oob=".alert:afterbegin"` | Pick extra selectors from the response for OOB swap |
+| `hx-sync="closest form:abort"` | Coordinate concurrent requests (abort, queue, drop, replace) |
+| `hx-encoding="multipart/form-data"` | Required for file uploads |
+| `hx-disabled-elt="this"` | Disable element(s) during the request (prevents double-submit) |
 
 ### Swap strategies
 
@@ -433,6 +494,52 @@ public TemplateInstance list(@HeaderParam("HX-Request") boolean htmx) {
     <span class="loading">Loading…</span>
   </div>
 {/if}
+```
+
+**Request synchronisation (hx-sync) — prevent race conditions:**
+```html
+<!-- Abort in-flight request when a new one starts (e.g., rapid filter clicks) -->
+<select hx-get="/ui/products"
+        hx-target="#product-list"
+        hx-sync="this:replace">
+
+<!-- Queue form submissions so none are lost -->
+<form hx-post="/ui/orders"
+      hx-sync="this:queue first">
+```
+
+| Strategy | Effect |
+|----------|--------|
+| `drop` | Ignore new request while one is in flight |
+| `abort` | Abort in-flight request, send new one |
+| `replace` | Abort in-flight, send new (alias for abort) |
+| `queue first` | Queue the first new request only |
+| `queue last` | Queue only the most recent request (default queue) |
+| `queue all` | Queue every request |
+
+**Always add `hx-sync` to forms and filters** to prevent duplicate submissions and stale responses.
+
+**File upload with hx-encoding:**
+```html
+<form hx-post="/ui/uploads"
+      hx-encoding="multipart/form-data"
+      hx-target="#upload-result">
+  <input type="file" name="file">
+  <button type="submit" hx-disabled-elt="this">Upload</button>
+</form>
+```
+
+```java
+@POST
+@Path("/uploads")
+@Consumes(MediaType.MULTIPART_FORM_DATA)
+@Produces(MediaType.TEXT_HTML)
+@Transactional
+public TemplateInstance upload(@MultipartForm FileUploadForm form) {
+    // form.file is a FileUpload from quarkus-resteasy-reactive
+    String path = storageService.store(form.file);
+    return uploadResult.data("path", path);
+}
 ```
 
 **Out-of-band swaps (OOB) — update multiple parts of the page from one response:**
