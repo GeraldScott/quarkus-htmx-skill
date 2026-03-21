@@ -170,16 +170,24 @@ bucket is insufficient -- it lets one attacker exhaust the limit for all users.
 public class RateLimitFilter implements ContainerRequestFilter {
 
     // Per-IP: max 100 requests per minute, auto-expires idle entries
-    private final Cache<String, AtomicInteger> counters = CacheBuilder.newBuilder()
-        .expireAfterWrite(1, TimeUnit.MINUTES)
-        .build();
+    private final ConcurrentHashMap<String, long[]> counters = new ConcurrentHashMap<>();
 
     @Override
     public void filter(ContainerRequestContext ctx) throws IOException {
-        String clientIp = ((HttpServerRequest) ctx.getProperty("io.vertx.ext.web.RoutingContext"))
+        String clientIp = ((io.vertx.core.http.HttpServerRequest)
+            ctx.getProperty("io.vertx.ext.web.RoutingContext"))
             .remoteAddress().host();
-        AtomicInteger count = counters.get(clientIp, AtomicInteger::new);
-        if (count.incrementAndGet() > 100) {
+
+        long now = System.currentTimeMillis();
+        long[] bucket = counters.compute(clientIp, (key, val) -> {
+            if (val == null || now - val[1] > 60_000) {
+                return new long[]{1, now}; // [count, windowStart]
+            }
+            val[0]++;
+            return val;
+        });
+
+        if (bucket[0] > 100) {
             ctx.abortWith(Response.status(429)
                 .header("Retry-After", "60")
                 .entity("Too many requests, please try again later.")
@@ -194,33 +202,43 @@ reverse proxy (nginx, Envoy) for rate limiting at the edge.
 
 ## History Security
 
-Prevent sensitive pages from being cached in htmx's localStorage history:
+Prevent sensitive pages from being cached in htmx's localStorage history.
+Also use `autocomplete="off"` on sensitive form fields to prevent browser
+autofill from leaking data:
 
 ```html
 <div hx-history="false">
   {! Payment form, sensitive data !}
+  <input type="text" name="card-number" autocomplete="off" />
+  <input type="text" name="cvv" autocomplete="off" />
 </div>
 ```
+
+Note: `hx-history="false"` only prevents htmx localStorage caching. Sensitive
+data may still appear in browser history or network logs -- always use HTTPS.
 
 ## Security Logging
 
 Log security-relevant events for monitoring and incident response. Mask
-sensitive data (passwords, tokens, PII) in log output:
+sensitive data (passwords, tokens, PII) in log output. See
+`references/quarkus/security/patterns.md` for the full audit logging pattern.
 
 ```java
+import io.quarkus.security.spi.runtime.AuthenticationFailedEvent;
+import io.quarkus.security.spi.runtime.AuthenticationSuccessEvent;
+
 @ApplicationScoped
 public class SecurityEventLogger {
 
     private static final Logger LOG = Logger.getLogger(SecurityEventLogger.class);
 
-    public void onAuthFailure(@Observes AuthenticationFailedEvent event) {
-        LOG.warnf("AUTH_FAILURE request=%s", event.getAuthenticationRequest());
+    public void onAuthSuccess(@Observes AuthenticationSuccessEvent event) {
+        LOG.infof("AUTH_SUCCESS user=%s",
+            event.getSecurityIdentity().getPrincipal().getName());
     }
 
-    public void onForbidden(@Observes AuthorizationFailureEvent event) {
-        LOG.warnf("ACCESS_DENIED user=%s resource=%s",
-            event.getSecurityIdentity().getPrincipal().getName(),
-            event.getAuthorizationContext());
+    public void onAuthFailure(@Observes AuthenticationFailedEvent event) {
+        LOG.warnf("AUTH_FAILURE reason=%s", event.getAuthenticationRequest());
     }
 }
 ```

@@ -92,7 +92,7 @@ to update `<head>` elements (title, CSS) on navigation.
 
 - `hx-confirm="Delete?"` -- prompt before request
 - `hx-include="[name='token']"` -- include additional element values in request
-- `hx-vals='{"key": "value"}'` -- add values to request (JSON format)
+- `hx-vals='{"key": "value"}'` -- add values to request (JSON format). Always validate these server-side -- clients can modify `hx-vals` freely
 - `hx-headers='{"X-Custom": "value"}'` -- add custom headers
 - `hx-indicator="#spinner"` -- show element during request (via `.htmx-indicator` class)
 - `hx-disabled-elt="this"` -- disable element during request

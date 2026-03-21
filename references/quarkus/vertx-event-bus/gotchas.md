@@ -12,3 +12,10 @@ Common Event Bus pitfalls, symptoms, and fixes.
 | `@RunOnVirtualThread` has no effect on async return types | Virtual-thread event-bus handlers require blocking signatures | Use `void` or plain return types with `@RunOnVirtualThread`, or keep the handler reactive |
 | Startup fails on `@ConsumeEvent("${...}")` | Config property is missing and no default was provided | Add the property or include a default value in the expression |
 | Expecting back-pressure, replay, or stream operators | Event Bus delivers messages, not broker-managed streams | Use Reactive Messaging for stream processing and broker-backed flow control |
+
+## Clustered event bus security
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Unauthorized nodes join the cluster and receive events | Clustered transport has no TLS or client-auth | Set `quarkus.vertx.eventbus.key-cert-pem` and `quarkus.vertx.eventbus.client-auth=REQUIRED` |
+| Sensitive data leaks between cluster nodes | Event bus messages travel in cleartext across the network | Enable TLS on the event bus transport (`quarkus.vertx.eventbus.ssl=true`) |

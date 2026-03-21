@@ -15,6 +15,14 @@ Common Reactive Messaging pitfalls, symptoms, and fixes.
 | In-memory tests pass but production broker behavior differs | `InMemoryConnector` skips connector metadata and real serialization | Add integration tests against a real broker for metadata, headers, and serialization |
 | Native tests fail with in-memory channels | `InMemoryConnector` is JVM-test only | Use JVM tests for in-memory channels and real-broker tests for native coverage |
 
+## Message security
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Sensitive data visible in broker logs or DLQ | Messages contain PII or secrets in plaintext | Encrypt sensitive message payloads before publishing; decrypt on consumption |
+| Untrusted message causes deserialization exploit | No schema validation on incoming messages | Validate message schema/content before deserializing into domain objects |
+| Messages processed from unauthorized producers | Broker has no authentication configured | Enable broker authentication (Kafka SASL/SSL, RabbitMQ credentials) and restrict topic/queue ACLs |
+
 ## Kafka-specific pitfalls
 
 | Symptom | Likely cause | Fix |

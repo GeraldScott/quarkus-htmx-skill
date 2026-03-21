@@ -204,10 +204,8 @@ Protect authentication endpoints from brute-force attacks:
 @ApplicationScoped
 public class LoginResource {
 
-    // Per-IP rate limiter: max 10 attempts per minute
-    private final Cache<String, AtomicInteger> attempts = CacheBuilder.newBuilder()
-        .expireAfterWrite(1, TimeUnit.MINUTES)
-        .build();
+    // Per-IP: max 10 login attempts per minute, simple sliding window
+    private final ConcurrentHashMap<String, long[]> attempts = new ConcurrentHashMap<>();
 
     @POST
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
@@ -217,9 +215,18 @@ public class LoginResource {
         @Context HttpServerRequest request
     ) {
         String clientIp = request.remoteAddress().host();
-        AtomicInteger count = attempts.get(clientIp, AtomicInteger::new);
-        if (count.incrementAndGet() > 10) {
-            return Response.status(429).entity("Too many login attempts").build();
+        long now = System.currentTimeMillis();
+        long[] bucket = attempts.compute(clientIp, (key, val) -> {
+            if (val == null || now - val[1] > 60_000) {
+                return new long[]{1, now};
+            }
+            val[0]++;
+            return val;
+        });
+        if (bucket[0] > 10) {
+            return Response.status(429)
+                .header("Retry-After", "60")
+                .entity("Too many login attempts").build();
         }
         // delegate to Quarkus form auth or custom auth logic
     }
@@ -228,22 +235,25 @@ public class LoginResource {
 
 ## Pattern: Audit Logging for Security Events
 
+Log authentication and authorization events for monitoring and incident
+response. Never log passwords, CSRF tokens, session IDs, or PII.
+
 ```java
+import io.quarkus.security.spi.runtime.AuthenticationFailedEvent;
+import io.quarkus.security.spi.runtime.AuthenticationSuccessEvent;
+
 @ApplicationScoped
 public class SecurityAuditLogger {
 
     private static final Logger LOG = Logger.getLogger(SecurityAuditLogger.class);
 
     public void onAuthSuccess(@Observes AuthenticationSuccessEvent event) {
-        LOG.infof("AUTH_SUCCESS user=%s", event.getIdentity().getPrincipal().getName());
+        LOG.infof("AUTH_SUCCESS user=%s",
+            event.getSecurityIdentity().getPrincipal().getName());
     }
 
     public void onAuthFailure(@Observes AuthenticationFailedEvent event) {
         LOG.warnf("AUTH_FAILURE reason=%s", event.getAuthenticationRequest());
-    }
-
-    public void onForbidden(@Observes @Priority(1) ForbiddenException event) {
-        LOG.warnf("ACCESS_DENIED resource=%s", event.getMessage());
     }
 }
 ```

@@ -181,15 +181,17 @@ public class ChatSocket {
 public class AuthConfigurator extends ServerEndpointConfig.Configurator {
     @Override
     public boolean checkOrigin(String originHeaderValue) {
-        // Reject cross-origin WebSocket connections
-        return originHeaderValue.equals("https://yourdomain.com");
+        // Reject cross-origin WebSocket connections -- replace with your domain
+        return "https://yourdomain.com".equals(originHeaderValue);
     }
 
     @Override
     public void modifyHandshake(ServerEndpointConfig sec,
                                 HandshakeRequest request,
                                 HandshakeResponse response) {
-        // Verify session cookie is present and valid during upgrade
+        // Verify session cookie is present and valid during the HTTP upgrade.
+        // Implement isValidSession() to check your auth cookie/token against
+        // your session store or security identity provider.
         List<String> cookies = request.getHeaders().get("Cookie");
         if (cookies == null || !isValidSession(cookies)) {
             throw new RuntimeException("Unauthorized WebSocket connection");
