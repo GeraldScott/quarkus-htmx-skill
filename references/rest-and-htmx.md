@@ -82,8 +82,8 @@ public class ExceptionMappers {
 ```
 
 Quarkus also automatically maps common exceptions without any mapper:
-- `NotFoundException` → 404
-- `BadRequestException` → 400
+- `NotFoundException` -> 404
+- `BadRequestException` -> 400
 
 For HTMX endpoints, return an error fragment instead of JSON:
 
@@ -93,6 +93,23 @@ public TemplateInstance handleNotFound(NotFoundException ex) {
     return error.data("message", ex.getMessage()).data("status", 404);
 }
 ```
+
+### Request/response filters
+
+```java
+import org.jboss.resteasy.reactive.server.ServerRequestFilter;
+import org.jboss.resteasy.reactive.server.ServerResponseFilter;
+
+class Filters {
+    @ServerRequestFilter
+    void before(ContainerRequestContext ctx) { }
+
+    @ServerResponseFilter
+    void after(ContainerResponseContext ctx) { }
+}
+```
+
+Use `@ServerRequestFilter(nonBlocking = true)` when event-loop pre-processing is required.
 
 ### DTO with Java Records (preferred)
 
@@ -107,6 +124,17 @@ public record ProductDto(Long id, String name, BigDecimal price, int stock) {
     public static ProductDto from(Product p) {
         return new ProductDto(p.id, p.name, p.price, p.stock);
     }
+}
+```
+
+Prefer `RestResponse<T>` over raw `Response` for type safety:
+
+```java
+import org.jboss.resteasy.reactive.RestResponse;
+
+@GET @Path("/{id}")
+RestResponse<ProductDto> byId(@PathParam("id") Long id) {
+    return RestResponse.ok(productService.findById(id));
 }
 ```
 
@@ -133,9 +161,12 @@ public TemplateInstance addToCart(
 ### Template injection and naming
 
 ```java
-@Inject Template products;            // → templates/products.html
-@Inject Template products$row;        // → templates/products$row.html (fragment)
-@Inject Template emails$welcome;      // → templates/emails/welcome.html
+@Inject Template products;            // -> templates/products.html
+@Inject Template products$row;        // -> templates/products$row.html (fragment)
+@Inject Template emails$welcome;      // -> templates/emails/welcome.html
+
+// @Location overrides field-name convention:
+@Inject @Location("mail/reset-password") Template resetPassword;
 ```
 
 Convention: `$` in the Java field name maps to `/` in the template path for fragments,
@@ -144,12 +175,12 @@ and to a `$` in the filename for same-directory fragments.
 ### Qute syntax reference
 
 ```html
-{! Comment — not rendered !}
+{! Comment -- not rendered !}
 
-{! Variable output — auto HTML-escaped !}
+{! Variable output -- auto HTML-escaped !}
 {product.name}
 
-{! Raw (unescaped) output — use carefully !}
+{! Raw (unescaped) output -- use carefully !}
 {product.description.raw}
 
 {! Conditional !}
@@ -181,21 +212,81 @@ and to a `$` in the filename for same-directory fragments.
 {! Include with data injection !}
 {#include products$row product=p /}
 
-{! Elvis operator — default value if null !}
+{! Elvis operator -- default value if null !}
 {product.category ?: 'Uncategorised'}
 
-{! Local variables with #let — reduces repetition !}
+{! Local variables with #let -- reduces repetition !}
 {#let fullName=customer.firstName + ' ' + customer.lastName}
   <span>{fullName}</span>
   <a href="mailto:{customer.email}">{fullName}</a>
 {/let}
 
-{! Template inheritance — base.html defines {#insert content/} !}
+{! Template inheritance -- base.html defines {#insert content/} !}
 {#include base.html}
 {#content}
   <h1>Products</h1>
 {/content}
 ```
+
+### @TemplateExtension for computed properties
+
+```java
+@TemplateExtension
+class ItemTemplateExtensions {
+    static BigDecimal discountedPrice(Item item) {
+        return item.price().multiply(new BigDecimal("0.9"));
+    }
+}
+```
+
+Template use: `{item.discountedPrice}` -- the first parameter type determines which objects the method applies to.
+
+### @TemplateData and @TemplateEnum
+
+Generate native-friendly resolvers that avoid reflection:
+
+```java
+@TemplateData
+class ItemView { public String name; public BigDecimal price; }
+
+@TemplateEnum
+enum Status { DRAFT, PUBLISHED }
+```
+
+Template use: `{item.name}` and `{#if status == Status:PUBLISHED}Live{/if}`
+
+### @MessageBundle for i18n
+
+```java
+@MessageBundle
+interface Messages {
+    @Message("Hello {name}!")
+    String hello(String name);
+}
+```
+
+Template use: `{msg:hello(user.name)}`
+
+### User tags
+
+Place tag templates in `templates/tags/`. Example `templates/tags/badge.html`:
+
+```html
+<span class="badge badge-{kind}">{it}</span>
+```
+
+Usage: `{#badge item.status kind='success' /}`. Tags are isolated from caller context by default -- pass explicit arguments or use `_unisolated` only when the tag must see parent data.
+
+### Programmatic rendering
+
+```java
+String html = report.data("items", items)
+        .data("generatedAt", LocalDateTime.now())
+        .render();
+// Async: renderAsync(), createUni(), createMulti()
+```
+
+Useful for emails, PDF generation, and scheduled reports outside of REST endpoints.
 
 ### Base layout pattern
 
@@ -223,7 +314,7 @@ and to a `$` in the filename for same-directory fragments.
 <!-- templates/products.html -->
 {#include base.html}
 
-{#title}Products — My App{/title}
+{#title}Products -- My App{/title}
 
 {#content}
 <h1>Products</h1>
@@ -235,7 +326,7 @@ and to a `$` in the filename for same-directory fragments.
 {/content}
 ```
 
-### Inline fragments (Qute 3.x+ — preferred over file-based `$` fragments)
+### Inline fragments (Qute 3.x+ -- preferred over file-based `$` fragments)
 
 Define fragments directly inside a template with `{#fragment}`. This keeps the full
 page and its HTMX partials in one file, avoiding fragment file sprawl.
@@ -258,7 +349,7 @@ page and its HTMX partials in one file, avoiding fragment file sprawl.
 {/content}
 ```
 
-Reference the fragment from Java with `$` notation — Quarkus resolves it to the
+Reference the fragment from Java with `$` notation -- Quarkus resolves it to the
 `{#fragment id=row}` inside `products.html`:
 
 ```java
@@ -270,8 +361,8 @@ public class Templates {
 ```
 
 **When to use inline vs. file fragments:**
-- **Inline `{#fragment}`** — default choice. Template and fragment live together, easier to maintain.
-- **Separate `$` file** — use when the fragment is shared across multiple templates.
+- **Inline `{#fragment}`** -- default choice. Template and fragment live together, easier to maintain.
+- **Separate `$` file** -- use when the fragment is shared across multiple templates.
 
 ### Type-safe templates (recommended for production)
 
@@ -286,7 +377,7 @@ public class Templates {
 return Templates.products(productService.listAll());
 ```
 
-Type-safe templates validate data bindings at build time — Quarkus will fail the build
+Type-safe templates validate data bindings at build time -- Quarkus will fail the build
 if you access a property that doesn't exist on the data object.
 
 ---
@@ -300,22 +391,22 @@ if you access a property that doesn't exist on the data object.
 | `hx-get="/path"` | GET on trigger (default: click) |
 | `hx-post="/path"` | POST on trigger |
 | `hx-put/hx-patch/hx-delete` | Other HTTP methods |
-| `hx-target="#element-id"` | Where to put the response |
-| `hx-swap="innerHTML"` | How to swap (see swap strategy guide below) |
-| `hx-trigger="click"` | Event to trigger on (see trigger reference below) |
-| `hx-indicator="#spinner"` | Element to show/hide during request |
+| `hx-target="#id"` | Where to put the response |
+| `hx-swap="innerHTML"` | How to swap (see below) |
+| `hx-trigger="click"` | Event to trigger on (see below) |
+| `hx-indicator="#spinner"` | Show/hide during request |
 | `hx-push-url="true"` | Push URL to browser history |
-| `hx-boost="true"` | Upgrade `<a>` and `<form>` to HTMX requests |
+| `hx-boost="true"` | Upgrade `<a>` and `<form>` to HTMX |
 | `hx-confirm="Sure?"` | Confirmation dialog before request |
 | `hx-vals='{"key":"val"}'` | Extra values to submit |
 | `hx-headers='{"X-Key":"val"}'` | Extra request headers |
-| `hx-select=".result"` | Pick a CSS selector from the response to swap (ignore the rest) |
-| `hx-select-oob=".alert:afterbegin"` | Pick extra selectors from the response for OOB swap |
-| `hx-sync="closest form:abort"` | Coordinate concurrent requests (abort, queue, drop, replace) |
+| `hx-select=".result"` | Pick CSS selector from response |
+| `hx-select-oob=".alert:afterbegin"` | Extra selectors for OOB swap |
+| `hx-sync="closest form:abort"` | Coordinate concurrent requests |
 | `hx-encoding="multipart/form-data"` | Required for file uploads |
-| `hx-disabled-elt="this"` | Disable element(s) during the request (prevents double-submit) |
-| `hx-preserve="true"` | Keep element unchanged across swaps (e.g., video player, scroll position) |
-| `hx-params="*"` | Control which params are submitted (`*`, `none`, `not field1`, `field1,field2`) |
+| `hx-disabled-elt="this"` | Disable element(s) during request |
+| `hx-preserve="true"` | Keep element unchanged across swaps |
+| `hx-params="*"` | Control which params are submitted |
 
 ### Swap strategies
 
@@ -330,7 +421,7 @@ if you access a property that doesn't exist on the data object.
 | `delete` | Remove the target element | Delete operations (no response body needed) |
 | `none` | Don't swap, just process response headers | Fire `HX-Trigger` events without DOM changes |
 
-**Swap modifiers** — append after the strategy, space-separated:
+**Swap modifiers** -- append after the strategy, space-separated:
 ```html
 hx-swap="innerHTML swap:300ms settle:100ms"
 hx-swap="innerHTML show:top"              <!-- scroll target to top after swap -->
@@ -338,10 +429,10 @@ hx-swap="innerHTML transition:true"       <!-- use View Transition API -->
 hx-swap="outerHTML scroll:#container:top" <!-- scroll a specific element -->
 ```
 
-- `swap:<time>` — delay before old content is removed
-- `settle:<time>` — delay before new content settles (for CSS transitions)
-- `transition:true` — use the View Transition API for animated swaps
-- `show:<target>:top|bottom` — scroll into view after swap
+- `swap:<time>` -- delay before old content is removed
+- `settle:<time>` -- delay before new content settles (for CSS transitions)
+- `transition:true` -- use the View Transition API for animated swaps
+- `show:<target>:top|bottom` -- scroll into view after swap
 
 **Choose swap based on intent:** use `outerHTML` when replacing an item, `beforeend` when appending,
 `innerHTML` when refreshing a container. Avoid replacing large containers when only a fragment changed.
@@ -351,13 +442,13 @@ hx-swap="outerHTML scroll:#container:top" <!-- scroll a specific element -->
 | Trigger | Fires when | Example |
 |---------|-----------|---------|
 | `click` (default) | Element clicked | Buttons, links |
-| `change` | Value changed | Select, checkbox, radio |
+| `change` | Value changed | Select, checkbox |
 | `submit` | Form submitted | Forms |
 | `keyup` | Key released | Text inputs |
-| `load` | Element loaded into DOM | Lazy-load content on page render |
-| `revealed` | Element scrolls into viewport | Infinite scroll sentinel |
-| `intersect` | Element enters viewport (IntersectionObserver) | Like `revealed` with threshold control |
-| `every <time>` | Polling interval | `every 30s` for periodic refresh |
+| `load` | Element loaded into DOM | Lazy-load on render |
+| `revealed` | Scrolls into viewport | Infinite scroll |
+| `intersect` | Enters viewport (IntersectionObserver) | Threshold control |
+| `every <time>` | Polling interval | `every 30s` |
 
 **Trigger modifiers:**
 ```html
@@ -397,7 +488,7 @@ Use these events in `hx-on::<event>` attributes or `document.addEventListener()`
 | `htmx:load` | New content loaded into DOM | Initialize third-party JS (datepickers, charts) on swapped content |
 
 ```html
-<!-- Inline event handler — reset form after successful POST -->
+<!-- Inline event handler -- reset form after successful POST -->
 <form hx-post="/ui/items"
       hx-target="#item-list"
       hx-swap="beforeend"
@@ -435,7 +526,7 @@ cross-cutting concerns (error handling). For CSRF, use `hx-headers` with Qute in
   <button hx-delete="/ui/todos/{item.id}"
           hx-target="#todo-{item.id}"
           hx-swap="outerHTML"
-          hx-confirm="Delete this task?">✕</button>
+          hx-confirm="Delete this task?">X</button>
 </li>
 ```
 
@@ -452,7 +543,7 @@ public Response delete(@PathParam("id") Long id) {
 
 **Click-to-edit:**
 ```html
-<!-- todo$item.html — view mode -->
+<!-- todo$item.html -- view mode -->
 <li id="todo-{item.id}">
   <span hx-get="/ui/todos/{item.id}/edit"
         hx-target="#todo-{item.id}"
@@ -460,7 +551,7 @@ public Response delete(@PathParam("id") Long id) {
         hx-trigger="click">{item.text}</span>
 </li>
 
-<!-- todo$item$edit.html — edit mode -->
+<!-- todo$item$edit.html -- edit mode -->
 <li id="todo-{item.id}">
   <form hx-put="/ui/todos/{item.id}"
         hx-target="#todo-{item.id}"
@@ -492,7 +583,7 @@ public TemplateInstance list(@HeaderParam("HX-Request") boolean htmx) {
 ```html
 <input type="search"
        name="q"
-       placeholder="Search products…"
+       placeholder="Search products..."
        hx-get="/ui/products"
        hx-trigger="keyup changed delay:400ms, search"
        hx-target="#product-list"
@@ -508,12 +599,12 @@ public TemplateInstance list(@HeaderParam("HX-Request") boolean htmx) {
        hx-trigger="revealed"
        hx-target="this"
        hx-swap="outerHTML">
-    <span class="loading">Loading…</span>
+    <span class="loading">Loading...</span>
   </div>
 {/if}
 ```
 
-**Request synchronisation (hx-sync) — prevent race conditions:**
+**Request synchronisation (hx-sync) -- prevent race conditions:**
 ```html
 <!-- Abort in-flight request when a new one starts (e.g., rapid filter clicks) -->
 <select hx-get="/ui/products"
@@ -559,7 +650,7 @@ public TemplateInstance upload(@MultipartForm FileUploadForm form) {
 }
 ```
 
-**Out-of-band swaps (OOB) — update multiple parts of the page from one response:**
+**Out-of-band swaps (OOB) -- update multiple parts of the page from one response:**
 ```html
 <!-- Server returns this; HTMX updates both #cart-count AND the main target -->
 <span id="cart-count" hx-swap-oob="true">{cartCount}</span>
@@ -585,11 +676,11 @@ quarkus.rest-csrf.token-header-name=X-CSRF-TOKEN
 ```
 
 For HTMX requests that are not standard form submissions, inject the token via
-the `hx-headers` attribute using Qute's `{inject:csrf.*}` namespace — this is
+the `hx-headers` attribute using Qute's `{inject:csrf.*}` namespace -- this is
 the Quarkus-native approach and avoids manual JavaScript:
 
 ```html
-<!-- In base.html — applies CSRF header to all HTMX requests in the body -->
+<!-- In base.html -- applies CSRF header to all HTMX requests in the body -->
 <body hx-headers='{"{inject:csrf.headerName}":"{inject:csrf.token}"}'>
 ```
 
@@ -599,7 +690,7 @@ For forms submitted normally (not via HTMX), Qute automatically injects a hidden
 ### Security beyond CSRF
 
 **XSS prevention:** Qute auto-escapes all `{expressions}` by default. Only `{value.raw}`
-bypasses escaping — never use `.raw` on user-supplied content. This makes Qute inherently
+bypasses escaping -- never use `.raw` on user-supplied content. This makes Qute inherently
 safer than most template engines for HTMX fragment responses.
 
 **Content Security Policy (CSP):** Add via Quarkus HTTP headers to prevent inline script
@@ -648,7 +739,7 @@ public Multi<String> stream() {
 
 Add `htmx-ext-sse` script after HTMX.
 
-**WebSocket alternative** — use `hx-ext="ws"` when bidirectional communication is needed
+**WebSocket alternative** -- use `hx-ext="ws"` when bidirectional communication is needed
 (e.g., chat). SSE is simpler and sufficient for server-to-client push (notifications,
 live dashboards). Prefer SSE unless clients need to send messages over the same connection.
 
@@ -679,16 +770,40 @@ return Response.ok(fragment.render())
     .build();
 
 // Useful HX-* response headers:
-// HX-Trigger              — fire a client-side event immediately
-// HX-Trigger-After-Swap   — fire event after swap completes
-// HX-Trigger-After-Settle — fire event after settle completes (CSS transitions done)
-// HX-Redirect             — redirect (full page)
-// HX-Location             — client-side redirect without full page reload (like hx-boost)
-// HX-Push-Url             — update browser URL without redirect
-// HX-Reswap               — override the hx-swap on the request
-// HX-Retarget             — override the hx-target on the request
-// HX-Refresh              — force a full page reload (true)
+// HX-Trigger              -- fire a client-side event immediately
+// HX-Trigger-After-Swap   -- fire event after swap completes
+// HX-Trigger-After-Settle -- fire event after settle completes (CSS transitions done)
+// HX-Redirect             -- redirect (full page)
+// HX-Location             -- client-side redirect without full page reload (like hx-boost)
+// HX-Push-Url             -- update browser URL without redirect
+// HX-Reswap               -- override the hx-swap on the request
+// HX-Retarget             -- override the hx-target on the request
+// HX-Refresh              -- force a full page reload (true)
 
 // HX-Trigger with JSON payload (pass data to client-side event listeners):
 // .header("HX-Trigger", "{\"showToast\":{\"level\":\"success\",\"message\":\"Saved!\"}}")
 ```
+
+---
+
+## REST gotchas
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Endpoint path not where expected | `@ApplicationPath`, `quarkus.rest.path`, and `quarkus.http.root-path` combine unexpectedly | Standardize on one base-path strategy; verify final path composition |
+| JSON body empty in native executable | Serialized type cannot be inferred from raw `Response` | Prefer concrete return types or annotate model with `@RegisterForReflection` |
+| Event-loop blocked warnings | Blocking code runs on IO thread | Use reactive APIs or `@Blocking` |
+| Filter behavior differs between endpoints | Filters follow endpoint threading model | Use `@ServerRequestFilter(nonBlocking = true)` for event-loop pre-processing |
+| Custom mapper for `JsonMappingException` not invoked | Built-in mapper for subtype takes precedence | Disable with `quarkus.rest.exception-mapping.disable-mapper-for` |
+| Multipart requests fail with HTTP 413 | Part exceeds `quarkus.http.limits.max-form-attribute-size` | Increase the size limit |
+
+## Qute gotchas
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Injected template not found | Injection point name does not match template path | Rename the field or add `@Location("...")` |
+| Type-safe validation skipped unexpectedly | Template comes from a custom `@Locate` locator, or section alias overrides checked parameter | Use explicit parameter declarations; avoid shadowing aliases |
+| Rendering fails with `NOT_FOUND` | Expression resolves to a missing property | Keep `quarkus.qute.strict-rendering=true` or set a deliberate `property-not-found-strategy` |
+| REST endpoint returning `TemplateInstance` blocks | Rendering path performs blocking work on a non-blocking endpoint | Move blocking work out of rendering or mark method with `@Blocking` |
+| User tag cannot see parent data | Tags are isolated by default | Pass explicit arguments or use `_unisolated` only when necessary |
+| Fragment renders nothing in main page | Fragment defined as hidden via `_hidden` or `rendered=false` | Include or render the fragment explicitly |

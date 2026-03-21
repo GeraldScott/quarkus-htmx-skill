@@ -13,14 +13,12 @@ For DevServices image/port/reuse config, see `project-structure.md` > DevService
 %prod.quarkus.datasource.password=${DB_PASSWORD}
 %prod.quarkus.datasource.jdbc.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME}
 
-# Connection pool tuning (Agroal)
+# Connection pool (Agroal)
 %prod.quarkus.datasource.jdbc.min-size=5
 %prod.quarkus.datasource.jdbc.max-size=20
 %prod.quarkus.datasource.jdbc.acquisition-timeout=30S
-%prod.quarkus.datasource.jdbc.background-validation-interval=2M
 
 # Hibernate
-quarkus.hibernate-orm.dialect=org.hibernate.dialect.PostgreSQLDialect
 %dev.quarkus.hibernate-orm.log.sql=true
 %dev.quarkus.hibernate-orm.log.format-sql=true
 %prod.quarkus.hibernate-orm.database.generation=none
@@ -51,16 +49,12 @@ public class ReportingRepository implements PanacheRepository<Report> {
 
 ## Panache — Active Record vs. Repository
 
-**Active Record**: Query methods live on the entity class. Best for simple CRUD with
-small domain models where the entity IS the aggregate root.
+**Active Record**: Query methods live on the entity class. Best for simple CRUD.
 
-**Repository**: Query methods live in a separate class injected as a CDI bean. Preferred
-when:
-- The entity has complex business logic
-- You need to mock the data layer in tests
-- Multiple aggregates share query patterns
+**Repository**: Query methods in a separate CDI bean. Preferred when the entity has complex
+logic, you need mocking, or multiple aggregates share query patterns.
 
-You can mix and match: use Active Record for simple entities, Repository for complex ones.
+Mix and match: Active Record for simple entities, Repository for complex ones.
 
 ---
 
@@ -225,6 +219,28 @@ Order.deleteById(id);
 Order.delete("status = ?1", OrderStatus.EXPIRED);
 ```
 
+### Projections
+
+```java
+@RegisterForReflection
+public record OrderSummary(Long id, OrderStatus status, BigDecimal totalAmount) {}
+
+List<OrderSummary> summaries = Order.find("status", OrderStatus.PENDING)
+        .project(OrderSummary.class).list();
+```
+
+`project(Class)` builds a constructor-based DTO projection. Use `@ProjectedConstructor` when the DTO has multiple constructors. Use `@ProjectedFieldName("fieldPath")` for nested or differently-named fields. Add `@RegisterForReflection` for native compilation.
+
+### Locking
+
+```java
+Order locked = Order.findById(id, LockModeType.PESSIMISTIC_WRITE);
+Order alsoLocked = Order.find("customer", customer)
+        .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
+```
+
+Lock queries must run inside a `@Transactional` method.
+
 ---
 
 ## Transaction management
@@ -261,13 +277,25 @@ public class OrderService {
 }
 ```
 
-Transaction scoping rules:
-- `REQUIRED` (default) — joins existing or creates new
-- `REQUIRES_NEW` — always creates new, suspends outer
-- `MANDATORY` — must exist, throws if none
-- `NEVER` — must not exist, throws if one exists
-- `NOT_SUPPORTED` — suspends any active transaction
-- `SUPPORTS` — uses existing if present, otherwise non-transactional
+Scoping: `REQUIRED` (default, joins or creates), `REQUIRES_NEW` (new tx, suspends outer),
+`MANDATORY` (must exist), `NEVER` (must not exist), `NOT_SUPPORTED` (suspends),
+`SUPPORTS` (uses if present).
+
+### Early flush for failure detection
+
+```java
+@Transactional
+void create(Order order) {
+    try {
+        order.persistAndFlush();
+    } catch (PersistenceException e) {
+        auditFailure(order);
+        throw e;
+    }
+}
+```
+
+`persistAndFlush()` forces an immediate SQL write so constraint violations surface inside your try/catch rather than at commit time.
 
 ---
 
@@ -289,37 +317,26 @@ Rules:
 - `R__{description}.sql` — repeatable (re-runs when checksum changes)
 - Double underscore between version and description
 
-### Example migrations
+### Example migration
 
 ```sql
 -- V1__create_customers.sql
 CREATE TABLE customers (
-    id          BIGSERIAL PRIMARY KEY,
-    name        VARCHAR(255)        NOT NULL,
-    email       VARCHAR(255)        NOT NULL UNIQUE,
-    created_at  TIMESTAMPTZ         NOT NULL DEFAULT now()
+    id         BIGSERIAL PRIMARY KEY,
+    name       VARCHAR(255)   NOT NULL,
+    email      VARCHAR(255)   NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ    NOT NULL DEFAULT now()
 );
 
 -- V2__create_orders.sql
 CREATE TABLE orders (
     id           BIGSERIAL PRIMARY KEY,
-    customer_id  BIGINT              NOT NULL REFERENCES customers(id),
-    status       VARCHAR(50)         NOT NULL DEFAULT 'PENDING',
-    total_amount NUMERIC(10, 2),
-    created_at   TIMESTAMPTZ         NOT NULL DEFAULT now()
+    customer_id  BIGINT         NOT NULL REFERENCES customers(id),
+    status       VARCHAR(50)    NOT NULL DEFAULT 'PENDING',
+    total_amount NUMERIC(10,2),
+    created_at   TIMESTAMPTZ    NOT NULL DEFAULT now()
 );
-
 CREATE INDEX idx_orders_customer ON orders(customer_id);
-CREATE INDEX idx_orders_status   ON orders(status);
-
--- V3__add_order_lines.sql
-CREATE TABLE order_lines (
-    id          BIGSERIAL PRIMARY KEY,
-    order_id    BIGINT         NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    product_id  BIGINT         NOT NULL,
-    quantity    INT            NOT NULL CHECK (quantity > 0),
-    unit_price  NUMERIC(10,2)  NOT NULL
-);
 ```
 
 ### Flyway config properties
@@ -333,55 +350,80 @@ quarkus.flyway.out-of-order=false          # Reject out-of-order migrations in p
 %dev.quarkus.flyway.clean-at-start=false   # Set true only when you want a full reset
 ```
 
+### Hibernate-to-Flyway transition
+
+Six-step handoff from `database.generation=drop-and-create` to Flyway:
+
+1. Stabilize the first model with Hibernate schema generation.
+2. Use Dev UI Flyway page to generate the initial migration from the current schema.
+3. Review the generated `V1.0.0__*.sql` before committing.
+4. Enable `quarkus.flyway.migrate-at-start=true`.
+5. Set `quarkus.flyway.baseline-on-migrate=true` if adopting against an existing schema.
+6. Switch production to `quarkus.hibernate-orm.schema-management.strategy=none` (or `validate`).
+
+### Multi-datasource migrations
+
+```text
+src/main/resources/
+  db/default/V1__init.sql
+  db/users/V1__init.sql
+  db/inventory/V1__init.sql
+```
+
+```properties
+quarkus.flyway.locations=db/default
+quarkus.flyway.users.locations=db/users
+quarkus.flyway.inventory.locations=db/inventory
+quarkus.flyway.migrate-at-start=true
+quarkus.flyway.users.migrate-at-start=true
+quarkus.flyway.inventory.migrate-at-start=true
+```
+
+Use `@FlywayDataSource("name")` for per-datasource `FlywayConfigurationCustomizer` injection.
+
+### CI migration validation
+
+```properties
+%test.quarkus.flyway.migrate-at-start=true
+%test.quarkus.flyway.validate-at-start=true
+```
+
+Verify: fresh schema creation, upgrade from a representative older version, no checksum drift.
+
 ---
 
 ## PostgreSQL-specific Hibernate mappings
 
 ```java
-// UUID primary key
-@Id
-@GeneratedValue
+@Id @GeneratedValue
 @Column(columnDefinition = "uuid DEFAULT gen_random_uuid()")
-public UUID id;
+public UUID id;                                          // UUID primary key
 
-// JSONB column (requires hibernate-types or Hibernate 6 built-in)
-@Column(columnDefinition = "jsonb")
-@JdbcTypeCode(SqlTypes.JSON)
-public Map<String, Object> metadata;
+@Column(columnDefinition = "jsonb") @JdbcTypeCode(SqlTypes.JSON)
+public Map<String, Object> metadata;                     // JSONB column
 
-// Array type
-@Column(columnDefinition = "text[]")
-@JdbcTypeCode(SqlTypes.ARRAY)
-public String[] tags;
+@Column(columnDefinition = "text[]") @JdbcTypeCode(SqlTypes.ARRAY)
+public String[] tags;                                    // Array type
 
-// Enum stored as text
 @Enumerated(EnumType.STRING)
-@Column(columnDefinition = "varchar(50)")
-public OrderStatus status;
+public OrderStatus status;                               // Enum as text
 
-// Optimistic locking
-@Version
-public int version;
+@Version public int version;                             // Optimistic locking
 ```
 
 ## N+1 queries — prevention
 
 ```java
-// BAD: N+1 — loads orders then fires a query per order for customer
+// BAD: N+1
 List<Order> orders = Order.listAll();
-orders.forEach(o -> System.out.println(o.customer.name)); // N queries
+orders.forEach(o -> o.customer.name); // fires N extra queries
 
-// GOOD: JOIN FETCH in one query
-List<Order> orders = Order.find(
-    "FROM Order o LEFT JOIN FETCH o.customer"
-).list();
+// GOOD: JOIN FETCH
+List<Order> orders = Order.find("FROM Order o LEFT JOIN FETCH o.customer").list();
 
-// GOOD: Use @EntityGraph for specific use cases
+// GOOD: @EntityGraph
 @NamedEntityGraph(name = "Order.withCustomerAndLines",
-    attributeNodes = {
-        @NamedAttributeNode("customer"),
-        @NamedAttributeNode("lines")
-    })
+    attributeNodes = { @NamedAttributeNode("customer"), @NamedAttributeNode("lines") })
 ```
 
 ## Pagination helper (for REST responses)
@@ -396,3 +438,54 @@ public record PagedResult<T>(List<T> data, long total, int page, int size) {
     }
 }
 ```
+
+## Testing Panache code
+
+**Active record** — add `io.quarkus:quarkus-panache-mock` in test scope:
+
+```java
+PanacheMock.mock(Order.class);
+Mockito.when(Order.count()).thenReturn(23L);
+assertEquals(23L, Order.count());
+PanacheMock.verify(Order.class).count();
+```
+
+**Repository** — use `@InjectMock` from `quarkus-junit5-mockito`:
+
+```java
+@InjectMock
+OrderRepository orderRepo;
+
+Mockito.when(orderRepo.count()).thenReturn(23L);
+assertEquals(23L, orderRepo.count());
+Mockito.verify(orderRepo).count();
+```
+
+### Panache gotchas
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `persist()`, `delete()`, or `update()` silently does nothing | Write runs outside a transaction | Add `@Transactional` on the calling method |
+| Data changed in memory but not yet in SQL | Hibernate flush is deferred until commit or query | Use `persistAndFlush()` only when early feedback is required |
+| `streamAll()` throws or leaks resources | Stream used without a transaction or not closed | Wrap in `@Transactional` and use try-with-resources |
+| Large table causes memory pressure | `listAll()` loads everything | Switch to `find()` with paging or a projection |
+| Entity fails with multiple persistence units | A Panache entity belongs to only one unit | Split model per unit or drop to lower-level ORM |
+| Queries scattered across styles | Active record and repository mixed carelessly | Pick one dominant style per feature |
+| `project(Class)` picks wrong constructor | DTO has multiple constructors | Use a single constructor or annotate with `@ProjectedConstructor` |
+| Nested projection value is null | Projection needs explicit path | Use `@ProjectedFieldName` for referenced fields |
+| Projection fails in native mode | DTO not retained for reflection | Add `@RegisterForReflection` |
+| Simplified query does something unexpected | Shorthand expansion differs from intended HQL | Use full HQL when the short form is ambiguous |
+| Paging fails after using `range()` | Range and page state are mutually exclusive | Re-apply `page(...)` or stick with one style |
+
+### Flyway gotchas
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Validation fails with checksum mismatch | An applied migration file was edited | Restore original file; use `repair()` only as deliberate recovery |
+| Team databases diverge after rebase | Migration files renamed, deleted, or reordered | Treat applied migrations as append-only |
+| Flyway marks schema as initialized but objects are missing | `baseline-on-migrate` on wrong DB or version | Use baseline only for trusted existing schemas with explicit version |
+| First migration never runs on legacy database | Baseline created history without matching actual schema | Compare real schema to intended baseline before enabling |
+| Local dev keeps wiping data | `%dev.quarkus.flyway.clean-at-start=true` is active | Limit `clean-at-start` to disposable environments |
+| Cleanup blocked unexpectedly | `clean-disabled=true` or missing DB permissions | Reserve clean for dev/test only |
+| Flyway does not run for reactive application | Only reactive client is configured | Add JDBC datasource and driver — Flyway uses JDBC internally |
+| Named datasource migrations hit wrong schema | Flyway configured on default instead of named DS | Use `quarkus.flyway.<name>.*` keys and `@FlywayDataSource("name")` |

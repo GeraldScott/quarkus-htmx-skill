@@ -15,24 +15,55 @@ compatibility: >
 license: MIT
 metadata:
   author: Archton
-  version: 1.1.0
+  version: 2.0.0
 ---
 
-# Quarkus Expert Skill
+# Quarkus + HTMX Expert Skill
 
 You are an expert Quarkus developer. This skill covers the full Quarkus development
 workflow: project setup, REST, CDI, Panache ORM, PostgreSQL, Qute + HTMX, testing,
-configuration, and the build/run lifecycle.
+configuration, messaging, OpenAPI, and the build/run lifecycle.
 
-**Target stack**: Quarkus (latest stable) · Java 21 · Maven · PostgreSQL · Qute · HTMX 
+**Target stack**: Quarkus (latest stable) · Java 21 · Maven · PostgreSQL · Qute · HTMX
 
-## Reference files — read as needed
+## Decision tree — find the right reference
 
-- `references/project-structure.md` — scaffolding, Maven BOM, extension list, directory layout
-- `references/rest-and-htmx.md` — JAX-RS resources, Qute templates, HTMX patterns, SSE
-- `references/database-postgresql.md` — datasource config, Panache entities & repositories, migrations
-- `references/testing.md` — QuarkusTest, @TestProfile, RestAssured, Mockito, Testcontainers
-- `references/htmx-anti-patterns.md` — HTMX anti-patterns to avoid (JSON responses, SPA state, polling abuse, etc.)
+```
+What do you need?
+├─ REST endpoints, Qute templates, HTMX patterns
+│  └─ references/rest-and-htmx.md
+├─ HTMX anti-patterns check
+│  └─ references/htmx-anti-patterns.md
+├─ Dependency injection (CDI / ArC)
+│  └─ references/dependency-injection.md
+├─ Application configuration (.properties, profiles, @ConfigMapping)
+│  └─ references/project-structure.md  (Configuration section)
+├─ Databases, ORM, Panache, Flyway
+│  ├─ Panache entities/repos, datasource, migrations
+│  │  └─ references/database-postgresql.md
+│  └─ Advanced: multi-PU, multitenancy, caching, plain Hibernate
+│     └─ references/advanced-orm.md
+├─ OpenAPI and Swagger UI
+│  └─ references/openapi.md
+├─ Messaging and events (CDI events, Vert.x bus, Kafka/AMQP)
+│  └─ references/messaging-and-events.md
+├─ Testing
+│  └─ references/testing.md
+└─ Project structure, tooling, Dev Mode, CLI
+   └─ references/project-structure.md
+```
+
+## Reference files — quick scan
+
+- `references/rest-and-htmx.md` — JAX-RS, Qute templates, HTMX patterns, SSE, WebSocket, CSRF
+- `references/htmx-anti-patterns.md` — HTMX anti-patterns to avoid (JSON responses, SPA state, polling abuse)
+- `references/dependency-injection.md` — CDI/ArC: scopes, qualifiers, producers, interceptors, lifecycle
+- `references/project-structure.md` — scaffolding, extensions, Dev Mode, configuration, CLI, tooling
+- `references/database-postgresql.md` — datasource, Panache entities & repos, Flyway migrations
+- `references/advanced-orm.md` — plain Hibernate ORM, multiple persistence units, multitenancy, caching
+- `references/openapi.md` — @Operation, @Schema, Swagger UI, filters, multi-doc, CI artifacts
+- `references/messaging-and-events.md` — CDI events, Vert.x event bus, Reactive Messaging (Kafka/AMQP)
+- `references/testing.md` — @QuarkusTest, @TestProfile, RestAssured, Mockito, Testcontainers
 
 Read only the reference file(s) relevant to the current task, not all of them.
 
@@ -45,30 +76,20 @@ header to return fragments vs full pages. If a solution mimics SPA architecture,
 ## Core Principles
 
 **Build-time magic, not runtime magic.** Quarkus moves reflection, classpath scanning, and
-proxy generation to build time. This means: favour constructor injection over field injection
-where testability matters, annotate third-party classes in a `QuarkusMain` or extension if
-they need reflection, and don't rely on classpath scanning tricks that bypass the Quarkus
-build-time processor.
+proxy generation to build time. Favour constructor injection over field injection where
+testability matters. Don't rely on classpath scanning tricks that bypass the build-time processor.
 
 **Dev Mode is your inner loop.** `./mvnw quarkus:dev` gives live reload and DevServices
 (automatic Docker containers for PostgreSQL, etc.). Prefer running tests inside Dev Mode
 (`quarkus.test.continuous-testing=enabled`) rather than separate `mvn test` runs during
 development.
 
-**application.properties is the single source of truth.** Quarkus uses MicroProfile Config;
-profile-specific overrides live in `%dev.`, `%test.`, `%prod.` prefixes. For groups of
-related properties, prefer `@ConfigMapping` over individual `@ConfigProperty` fields:
+**application.properties is the single source of truth.** Profile-specific overrides live in
+`%dev.`, `%test.`, `%prod.` prefixes. For groups of related properties, prefer `@ConfigMapping`
+over individual `@ConfigProperty` fields — see `references/project-structure.md` Configuration section.
 
-```java
-@ConfigMapping(prefix = "app.mail")
-public interface MailConfig {
-    String from();
-    Optional<String> replyTo();
-    @WithDefault("25") int port();
-}
-// Inject as: @Inject MailConfig mailConfig;
-// Maps: app.mail.from, app.mail.reply-to, app.mail.port
-```
+**Align extensions through the BOM.** Start with the smallest extension set, then add only
+what the feature needs. Never mix `resteasy` and `resteasy-reactive` in the same project.
 
 ---
 
@@ -96,48 +117,36 @@ cd my-app && ./mvnw quarkus:dev
   </dependencies>
 </dependencyManagement>
 ```
-Use `quarkus.platform.version` in `<properties>`. Check https://quarkus.io/blog/ for the
-latest stable version when creating new projects.
-
-### Datasource config
-DevServices auto-starts PostgreSQL for `%dev`/`%test` when Docker is running — no config
-needed. For production datasource, pool tuning, and Flyway setup, see `references/database-postgresql.md`.
-
-## Common Quarkus gotchas
-
-**Transactional boundaries** — `@Transactional` works on CDI beans, not on JAX-RS resources
-directly in all edge cases. Prefer putting `@Transactional` on service methods rather than
-resource methods. For read-only operations, `@Transactional(readOnly = true)` improves
-connection pool efficiency.
-
-**Reactive vs. imperative** — `resteasy-reactive` is the current recommended extension even
-for blocking (imperative) code; it uses the blocking thread pool for non-async methods.
-Don't mix `resteasy` and `resteasy-reactive` in the same project.
-
-**CDI alternatives** — use `@Named` + `@Qualifier` rather than conditional beans where
-possible; Quarkus's build-time CDI resolves ambiguity at compile time, not runtime, so
-unsatisfied injection points are caught early (a feature, not a bug).
-
-**Static resources** — place under `src/main/resources/META-INF/resources/`. The path
-`/META-INF/resources/` maps to the web root automatically.
-
-**Configuration secrets** — use `${ENV_VAR}` placeholders in `application.properties`; never
-hardcode credentials. For local dev, an `.env` file in the project root is picked up
-automatically by Quarkus Dev Mode (add to `.gitignore`).
-
-**Native image** — if native compilation is needed, read the `references/project-structure.md`
-file for GraalVM reflection config and Mandrel notes.
 
 ---
 
-## Health and observability 
+## Common gotchas
 
-Adding `smallrye-health` gives `/q/health`, `/q/health/live`, `/q/health/ready` endpoints
-automatically, with database readiness included when a datasource is configured.
+### Transactions and threading
 
-Adding `smallrye-openapi` gives `/q/openapi` and `/q/swagger-ui` with zero configuration.
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Writes don't persist | No `@Transactional` on service method | Add `@Transactional` at the service layer, not the resource |
+| Event-loop blocked warning | Blocking code on IO thread | Use `@Blocking` or reactive APIs |
+| `resteasy` + `resteasy-reactive` conflict | Both on classpath | Remove `resteasy`; use `resteasy-reactive` for everything |
+
+### Configuration and resources
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Static files not served | Wrong directory | Place under `src/main/resources/META-INF/resources/` |
+| Credentials in repo | Hardcoded secrets | Use `${ENV_VAR}` placeholders + `.env` file (gitignored) |
+| Config change has no effect | Build-time-fixed property | Rebuild/repackage after changing |
+| CDI ambiguity at startup | Multiple beans match | Use `@Qualifier` or `@Identifier`; Quarkus resolves at build time |
 
 ---
 
-When you need more depth on any of these topics, read the relevant reference file listed
-at the top before generating code.
+## Health and observability
+
+`smallrye-health` → `/q/health`, `/q/health/live`, `/q/health/ready`
+`smallrye-openapi` → `/q/openapi`, `/q/swagger-ui`
+
+---
+
+When you need more depth on any topic, read the relevant reference file listed above
+before generating code.

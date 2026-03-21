@@ -71,6 +71,10 @@ REQUIRED_REFS=(
     "references/project-structure.md"
     "references/testing.md"
     "references/htmx-anti-patterns.md"
+    "references/dependency-injection.md"
+    "references/messaging-and-events.md"
+    "references/openapi.md"
+    "references/advanced-orm.md"
 )
 
 for ref in "${REQUIRED_REFS[@]}"; do
