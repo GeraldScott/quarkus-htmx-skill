@@ -181,6 +181,15 @@ and to a `$` in the filename for same-directory fragments.
 {! Include with data injection !}
 {#include products$row product=p /}
 
+{! Elvis operator — default value if null !}
+{product.category ?: 'Uncategorised'}
+
+{! Local variables with #let — reduces repetition !}
+{#let fullName=customer.firstName + ' ' + customer.lastName}
+  <span>{fullName}</span>
+  <a href="mailto:{customer.email}">{fullName}</a>
+{/let}
+
 {! Template inheritance — base.html defines {#insert content/} !}
 {#include base.html}
 {#content}
@@ -378,6 +387,7 @@ Use these events in `hx-on::<event>` attributes or `document.addEventListener()`
 | `htmx:responseError` | Server returned error status | Show error toasts |
 | `htmx:sendError` | Network failure | Show offline warning |
 | `htmx:timeout` | Request timed out | Retry or show timeout message |
+| `htmx:load` | New content loaded into DOM | Initialize third-party JS (datepickers, charts) on swapped content |
 
 ```html
 <!-- Inline event handler — reset form after successful POST -->
@@ -579,6 +589,35 @@ the Quarkus-native approach and avoids manual JavaScript:
 For forms submitted normally (not via HTMX), Qute automatically injects a hidden
 `csrf-token` field when using `{inject:csrf.token}` inside a `<form>`.
 
+### Security beyond CSRF
+
+**XSS prevention:** Qute auto-escapes all `{expressions}` by default. Only `{value.raw}`
+bypasses escaping — never use `.raw` on user-supplied content. This makes Qute inherently
+safer than most template engines for HTMX fragment responses.
+
+**Content Security Policy (CSP):** Add via Quarkus HTTP headers to prevent inline script
+injection. HTMX works without `unsafe-inline` because it uses attributes, not script blocks:
+
+```properties
+quarkus.http.header."Content-Security-Policy".value=default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'
+```
+
+**Endpoint-level authorisation with `@RolesAllowed`:**
+
+```java
+@GET
+@Path("/admin/users")
+@RolesAllowed("admin")
+@Produces(MediaType.TEXT_HTML)
+public TemplateInstance adminUsers() {
+    return adminUsers.data("users", userService.listAll());
+}
+```
+
+Requires `quarkus-security` + an identity provider (`quarkus-oidc`, `quarkus-smallrye-jwt`,
+or `quarkus-security-jpa`). For HTMX requests hitting a 403, return an error fragment via
+`@ServerExceptionMapper` rather than a redirect.
+
 ### Server-Sent Events with HTMX (real-time updates)
 
 ```java
@@ -617,10 +656,16 @@ return Response.ok(fragment.render())
     .build();
 
 // Useful HX-* response headers:
-// HX-Trigger       — fire a client-side event
-// HX-Redirect      — redirect (full page)
-// HX-Push-Url      — update browser URL without redirect
-// HX-Reswap        — override the hx-swap on the request
-// HX-Retarget      — override the hx-target on the request
-// HX-Refresh       — force a full page reload (true)
+// HX-Trigger              — fire a client-side event immediately
+// HX-Trigger-After-Swap   — fire event after swap completes
+// HX-Trigger-After-Settle — fire event after settle completes (CSS transitions done)
+// HX-Redirect             — redirect (full page)
+// HX-Location             — client-side redirect without full page reload (like hx-boost)
+// HX-Push-Url             — update browser URL without redirect
+// HX-Reswap               — override the hx-swap on the request
+// HX-Retarget             — override the hx-target on the request
+// HX-Refresh              — force a full page reload (true)
+
+// HX-Trigger with JSON payload (pass data to client-side event listeners):
+// .header("HX-Trigger", "{\"showToast\":{\"level\":\"success\",\"message\":\"Saved!\"}}")
 ```

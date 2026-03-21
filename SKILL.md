@@ -9,6 +9,9 @@ description: >
   quarkus-*, @QuarkusTest, Panache, Qute, quarkus.datasource, or shows pom.xml/build.gradle
   files with io.quarkus dependencies. Also use for project scaffolding, extension management
   with the Quarkus CLI, native compilation questions, or any Quarkus-specific error messages.
+compatibility: >
+  Requires Java 21+, Maven 3.9+, Docker (for DevServices/Testcontainers).
+  Works with Claude Code and Claude.ai.
 ---
 
 # Quarkus Expert Skill
@@ -49,8 +52,19 @@ build-time processor.
 development.
 
 **application.properties is the single source of truth.** Quarkus uses MicroProfile Config;
-profile-specific overrides live in `%dev.`, `%test.`, `%prod.` prefixes. Avoid
-`@ConfigProperty` on static fields — inject into instance fields or constructor params.
+profile-specific overrides live in `%dev.`, `%test.`, `%prod.` prefixes. For groups of
+related properties, prefer `@ConfigMapping` over individual `@ConfigProperty` fields:
+
+```java
+@ConfigMapping(prefix = "app.mail")
+public interface MailConfig {
+    String from();
+    Optional<String> replyTo();
+    @WithDefault("25") int port();
+}
+// Inject as: @Inject MailConfig mailConfig;
+// Maps: app.mail.from, app.mail.reply-to, app.mail.port
+```
 
 ---
 
@@ -81,19 +95,9 @@ cd my-app && ./mvnw quarkus:dev
 Use `quarkus.platform.version` in `<properties>`. Check https://quarkus.io/blog/ for the
 latest stable version when creating new projects.
 
-### Minimum datasource config (application.properties)
-```properties
-# Dev / test — DevServices spins up a real PostgreSQL container automatically
-# when no %dev / %test datasource URL is set and Docker is available.
-
-# Production
-%prod.quarkus.datasource.db-kind=postgresql
-%prod.quarkus.datasource.username=${DB_USER}
-%prod.quarkus.datasource.password=${DB_PASSWORD}
-%prod.quarkus.datasource.jdbc.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME}
-%prod.quarkus.hibernate-orm.database.generation=none
-%prod.quarkus.flyway.migrate-at-start=true
-```
+### Datasource config
+DevServices auto-starts PostgreSQL for `%dev`/`%test` when Docker is running — no config
+needed. For production datasource, pool tuning, and Flyway setup, see `references/database-postgresql.md`.
 
 ## Common Quarkus gotchas
 

@@ -4,13 +4,9 @@
 
 ### application.properties — full example
 
-```properties
-# Dev Mode: DevServices starts a PostgreSQL container automatically.
-# Override only what you need to customise:
-quarkus.datasource.devservices.image-name=postgres:16-alpine
-quarkus.datasource.devservices.reuse=true
-quarkus.datasource.devservices.port=15432
+For DevServices image/port/reuse config, see `project-structure.md` > DevServices PostgreSQL.
 
+```properties
 # Prod datasource (values come from environment or .env)
 %prod.quarkus.datasource.db-kind=postgresql
 %prod.quarkus.datasource.username=${DB_USER}
