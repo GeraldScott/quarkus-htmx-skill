@@ -66,11 +66,11 @@ echo ""
 echo "=== Reference Files ==="
 
 REQUIRED_REFS=(
-    "rest-and-htmx.md"
-    "database-postgresql.md"
-    "project-structure.md"
-    "testing.md"
-    "htmx-anti-patterns.md"
+    "references/rest-and-htmx.md"
+    "references/database-postgresql.md"
+    "references/project-structure.md"
+    "references/testing.md"
+    "references/htmx-anti-patterns.md"
 )
 
 for ref in "${REQUIRED_REFS[@]}"; do
@@ -95,7 +95,7 @@ done
 echo ""
 echo "=== HTMX Content ==="
 
-HTMX_FILE="$SKILL_DIR/rest-and-htmx.md"
+HTMX_FILE="$SKILL_DIR/references/rest-and-htmx.md"
 
 if [[ -f "$HTMX_FILE" ]]; then
     # Must contain core HTMX attributes
@@ -161,7 +161,7 @@ fi
 echo ""
 echo "=== Anti-Patterns Guide ==="
 
-AP_FILE="$SKILL_DIR/htmx-anti-patterns.md"
+AP_FILE="$SKILL_DIR/references/htmx-anti-patterns.md"
 
 if [[ -f "$AP_FILE" ]]; then
     EXPECTED_PATTERNS=(
@@ -206,7 +206,7 @@ echo "=== Quarkus + Qute Content ==="
 
 # SKILL.md must mention Quarkus stack essentials
 for keyword in Quarkus Qute Panache HTMX "application.properties" Flyway; do
-    if grep -rq "$keyword" "$SKILL_DIR"/*.md; then
+    if grep -rq "$keyword" "$SKILL_DIR"/*.md "$SKILL_DIR"/references/*.md 2>/dev/null; then
         pass "Skill pack covers '$keyword'"
     else
         fail "Skill pack missing '$keyword' coverage"

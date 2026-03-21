@@ -50,7 +50,6 @@ public class ProductResource {
     @DELETE
     @Path("/{id}")
     @Transactional
-    @ResponseStatus(204)
     public void delete(@PathParam("id") Long id) {
         productService.delete(id);
     }
@@ -327,18 +326,9 @@ Use these events in `hx-on::<event>` attributes or `document.addEventListener()`
       hx-on::after-request="this.reset()">
 ```
 
-```html
-<!-- Global CSRF header injection via configRequest (in base template) -->
-<script>
-  document.addEventListener('htmx:configRequest', (e) => {
-    e.detail.headers['X-CSRF-TOKEN'] =
-      document.querySelector('meta[name="csrf-token"]').content;
-  });
-</script>
-```
-
 **Rule: prefer `hx-on::` attributes over `<script>` blocks. Use global event listeners only for
-cross-cutting concerns (CSRF, error handling). Never use events to manually rebuild DOM.**
+cross-cutting concerns (error handling). For CSRF, use `hx-headers` with Qute injection
+(see CSRF section below). Never use events to manually rebuild DOM.**
 
 ### Common patterns
 
@@ -461,23 +451,26 @@ return cartRow
 
 ### CSRF protection with HTMX
 
-Quarkus RESTEasy has CSRF protection via `quarkus-csrf-reactive`:
+Add the `quarkus-rest-csrf` extension (formerly `quarkus-csrf-reactive`):
 
 ```properties
-quarkus.http.csrf.enabled=true
-quarkus.http.csrf.token-header-name=X-CSRF-TOKEN
+# Config prefix is quarkus.rest-csrf.*
+quarkus.rest-csrf.form-field-name=csrf-token
+# Custom header name (default is X-CSRF-TOKEN)
+quarkus.rest-csrf.token-header-name=X-CSRF-TOKEN
 ```
 
+For HTMX requests that are not standard form submissions, inject the token via
+the `hx-headers` attribute using Qute's `{inject:csrf.*}` namespace — this is
+the Quarkus-native approach and avoids manual JavaScript:
+
 ```html
-<!-- Include token in your base template -->
-<meta name="csrf-token" content="{csrf}">
-<script>
-  document.addEventListener('htmx:configRequest', (e) => {
-    e.detail.headers['X-CSRF-TOKEN'] =
-      document.querySelector('meta[name="csrf-token"]').content;
-  });
-</script>
+<!-- In base.html — applies CSRF header to all HTMX requests in the body -->
+<body hx-headers='{"{inject:csrf.headerName}":"{inject:csrf.token}"}'>
 ```
+
+For forms submitted normally (not via HTMX), Qute automatically injects a hidden
+`csrf-token` field when using `{inject:csrf.token}` inside a `<form>`.
 
 ### Server-Sent Events with HTMX (real-time updates)
 

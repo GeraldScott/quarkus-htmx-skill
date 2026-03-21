@@ -105,10 +105,6 @@ public class Order extends PanacheEntity {
 
     // ----- Static query helpers (Active Record pattern) -----
 
-    public static Optional<Order> findByIdOptional(Long id) {
-        return findByIdOptional(id);   // inherited; alias for clarity
-    }
-
     public static List<Order> findByCustomer(Customer customer) {
         return list("customer", customer);
     }
