@@ -8,9 +8,20 @@
 
 ## Executive Summary
 
-This is a well-crafted, progressive-disclosure skill for Quarkus + HTMX development. It follows the Anthropic guide's recommended patterns correctly and covers the core stack thoroughly. However, it has a **critical file path bug**, several areas of **content redundancy**, a **code bug** in the Panache example, a **Spring annotation leak** in the REST example, and notable **HTMX/Qute coverage gaps** compared to official documentation. No equivalent Quarkus skill exists in the public ecosystem, which makes this skill uniquely valuable but also means there's no peer to validate against.
+This is a well-crafted, progressive-disclosure skill for Quarkus + HTMX development. It follows
+the Anthropic guide's recommended patterns and covers the core stack thoroughly.
 
-**Verdict:** Solid foundation, needs a focused cleanup pass.
+**Review v1 (2026-03-21)** identified critical bugs, redundancy, and content gaps. All P0/P1/P2
+issues and selected P3 items have been resolved (see Fix Log below).
+
+**Review v2 (2026-03-21)** compares against b6k-dev/quarkus-skill — a comprehensive, pure-Quarkus
+skill with 13 reference modules. This comparison reveals architectural differences (HTMX-integrated
+monolith vs. Quarkus-pure router) and specific content gaps in CDI, configuration, messaging,
+and gotchas coverage.
+
+**Verdict:** Production-ready for the Quarkus + HTMX stack. The HTMX integration and anti-patterns
+document remain unique advantages no other skill offers. The main remaining gap is depth in
+Quarkus-only domains (CDI patterns, messaging, advanced ORM) that b6k-dev covers well.
 
 ---
 
@@ -148,7 +159,7 @@ The SSE example uses `Multi<String>` (Mutiny reactive type) but the skill's reco
 | **Jeffallan/claude-skills** | github.com/Jeffallan/claude-skills | 66 skills incl. `java-architect` and `spring-boot-engineer` — Java peer |
 | **anthropics/skills** (17 official skills) | github.com/anthropics/skills | Reference implementations for skill structure |
 | **getsentry/sentry-for-ai** | github.com/getsentry/sentry-for-ai | Best-practice MCP+skill architecture (router pattern) |
-| **No Quarkus skill exists** | N/A | This skill is unique in the ecosystem |
+| **b6k-dev/quarkus-skill** | github.com/b6k-dev/quarkus-skill | Comprehensive pure-Quarkus skill — 13 modules, decision tree router (see Section 9) |
 
 ### Comparison: ercan-er/htmx-claude-skill (HTMX-only)
 
@@ -314,13 +325,189 @@ The `tests/validate-skill.sh` is a solid structural validator that checks:
 
 ---
 
-## 8. Strengths Worth Preserving
+## 8. Fix Log
 
-- **Anti-patterns document is exceptional.** No other skill in the ecosystem has this. It's the single most valuable file in this skill — it prevents the #1 mistake developers make with HTMX (falling back to SPA patterns). Keep it and expand it.
-- **Progressive disclosure is textbook.** The SKILL.md is lean (~135 lines), reference files are loaded on-demand. This is exactly what the Anthropic guide recommends.
-- **Dual Panache patterns.** Showing both Active Record and Repository with guidance on when to use each is valuable — most tutorials only show one.
+All P0, P1, P2, and selected P3 issues from the original review have been resolved.
+
+### P0 — Critical (all fixed)
+
+| # | Issue | Resolution | Commit |
+|---|---|---|---|
+| 1 | Reference file paths wrong | Moved files to `references/` directory | `81dfa59` |
+| 2 | Infinite recursion in Panache `findByIdOptional` | Deleted broken override | `81dfa59` |
+| 3 | Spring `@ResponseStatus(204)` in JAX-RS | Removed; void `@DELETE` returns 204 natively | `81dfa59` |
+| - | CSRF config prefix wrong (`quarkus.http.csrf.*`) | Fixed to `quarkus.rest-csrf.*`; replaced JS injection with native Qute `{inject:csrf.*}` | `81dfa59` |
+
+### P1 — High (all fixed)
+
+| # | Issue | Resolution | Commit |
+|---|---|---|---|
+| 4 | Missing `hx-select` / `hx-select-oob` | Added to cheat sheet | `36886a1` |
+| 5 | Missing `hx-sync` | Added strategy table + form/filter patterns | `36886a1` |
+| 6 | Missing `{#fragment}` inline Qute | Added with template + Java examples | `36886a1` |
+| 7 | Using old `ExceptionMapper` interface | Replaced with `@ServerExceptionMapper` + HTMX error fragment | `36886a1` |
+| 8 | CSRF config wrong | Fixed in P0 pass | `81dfa59` |
+| 9 | Missing `hx-encoding` file uploads | Added multipart pattern with `@MultipartForm` | `36886a1` |
+
+### P2 — Medium (all fixed)
+
+| # | Issue | Resolution | Commit |
+|---|---|---|---|
+| 10 | 6 redundancy areas | Replaced datasource block with pointer; cross-referenced DevServices | `2d2cc91` |
+| 11 | No security beyond CSRF | Added XSS/Qute, CSP headers, `@RolesAllowed` | `2d2cc91` |
+| 12 | Missing `?:` elvis and `{#let}` | Added to Qute syntax reference | `2d2cc91` |
+| 13 | Missing response headers | Added `HX-Trigger-After-Swap/Settle`, `HX-Location`, JSON payload | `2d2cc91` |
+| 14 | Missing `htmx:load` event | Added to lifecycle table | `2d2cc91` |
+| 15 | Missing `@ConfigMapping` | Added with interface example to SKILL.md | `2d2cc91` |
+| 16 | Missing `hx-disabled-elt` | Added in P1 pass (cheat sheet + file upload) | `36886a1` |
+| 17 | No `compatibility` field | Added to frontmatter | `2d2cc91` |
+
+### P3 — Low (selected items fixed)
+
+| # | Issue | Resolution | Commit |
+|---|---|---|---|
+| 18 | No `license`/`metadata` | Added MIT + author/version | `9b07adb` |
+| 19 | No WebSocket extension | Added `hx-ext="ws"` with SSE comparison | `9b07adb` |
+| 22 | No `hx-preserve`/`hx-params`/event filters | Added all three | `9b07adb` |
+
+### P3 — Remaining (not yet addressed)
+
+| # | Issue | Status |
+|---|---|---|
+| 20 | Split `rest-and-htmx.md` (move pure REST/JSON elsewhere) | Open |
+| 21 | Add working `examples/` directory | Open |
+
+---
+
+## 9. Comparison with b6k-dev/quarkus-skill
+
+### Overview
+
+[b6k-dev/quarkus-skill](https://github.com/b6k-dev/quarkus-skill) is a pure-Quarkus skill
+(no HTMX) with 13 reference modules, a decision-tree SKILL.md, and a `/quarkus` slash command.
+It is the most comprehensive Quarkus skill found in the public ecosystem.
+
+### Architecture comparison
+
+| Aspect | htmx-quarkus | b6k-dev/quarkus-skill |
+|---|---|---|
+| **Scope** | Quarkus + HTMX full-stack | Quarkus platform only (no frontend) |
+| **SKILL.md style** | Cheat-sheet + principles + gotchas | Decision tree router to 13 modules |
+| **Reference modules** | 5 files (flat) | 13 directories, each with README/api/patterns/gotchas |
+| **Per-module structure** | Single markdown file per concern | 4 files per module (README, api.md, patterns.md, gotchas.md) |
+| **Slash command** | None | `/quarkus <task>` loads context automatically |
+| **Installation** | Manual (copy to skills dir) | `npx skills add` or `curl` installer |
+| **HTMX coverage** | Comprehensive (cheat sheets, patterns, anti-patterns, SSE, WebSocket) | None |
+| **Qute coverage** | Full (syntax, fragments, inheritance, type-safe, HTMX integration) | Templates module with fragments, extensions, i18n |
+| **Testing** | Dedicated `testing.md` reference | Mentioned in module gotchas but no dedicated module |
+| **Anti-patterns** | Dedicated document (7 anti-patterns) | Per-module gotchas tables |
+
+### What b6k-dev does better
+
+**1. Decision tree in SKILL.md** — The router pattern ("What do you need? -> module") is
+superior progressive disclosure. Our flat reference list requires Claude to guess which file
+is relevant. The decision tree makes routing deterministic.
+
+**2. Gotchas as structured tables** — Every module has a `gotchas.md` with `Symptom | Cause | Fix`
+tables. This is more actionable than our prose-based "Common gotchas" section. Example:
+
+> | Symptom | Likely cause | Fix |
+> | JSON body is empty in native executable | Serialized type cannot be inferred from raw Response | Prefer concrete return types or annotate with @RegisterForReflection |
+
+**3. Deeper CDI/DI coverage** — 8 patterns including:
+- Constructor injection with Lombok `@RequiredArgsConstructor`
+- `@IfBuildProfile` + `@DefaultBean` for profile-based alternatives
+- `@Inject @All List<T>` for collecting implementations
+- `@Lock` for thread-safe `@ApplicationScoped` beans
+- `@Decorator` for business-logic decoration
+- `InterceptionProxy` for external library integration
+
+Our skill covers CDI in ~4 lines of prose. This is a significant gap.
+
+**4. Configuration module depth** — 8 patterns including:
+- `@ConfigMapping` with nested interfaces (we added basic example)
+- Property expression fallbacks (`${HOST:${remote.host}}`)
+- Startup validation with `@Min`/`@Max` constraints
+- Build-time drift tracking (`quarkus.config-tracking.enabled`)
+- `.env` file patterns (we mention but don't detail)
+
+**5. Messaging and event modules** — Three separate modules:
+- `cdi-events` — in-process CDI events with `@Observes`
+- `vertx-event-bus` — Vert.x event bus for clustered/non-blocking
+- `messaging` — cross-service messaging (Kafka, AMQP, etc.)
+
+We have zero coverage of any messaging/eventing patterns.
+
+**6. Advanced ORM module** — Dedicated `data-orm-advanced` covering:
+- Multiple persistence units
+- Multitenancy
+- Second-level caching
+- Hibernate extension points
+
+Our `database-postgresql.md` covers basic Panache only.
+
+**7. OpenAPI as separate module** — Dedicated patterns for API contract documentation.
+We mention `smallrye-openapi` in passing but show no annotation patterns.
+
+**8. Multipart upload gotchas** — Documents HTTP 413 limits and temp file cleanup.
+We added a multipart pattern but lack the gotchas.
+
+### What htmx-quarkus does better
+
+**1. HTMX — the entire frontend story.** b6k-dev has zero HTMX coverage. Our skill provides:
+- Complete attribute cheat sheet (20+ attributes)
+- Swap strategies with modifiers
+- Trigger reference with event filters
+- Event lifecycle table
+- 7 anti-patterns with wrong/right examples
+- SSE and WebSocket patterns
+- OOB swaps, hx-sync, file uploads
+- CSRF with Qute native integration
+
+This is the single biggest differentiator and cannot be replicated by combining b6k-dev
+with the ercan-er HTMX skill, because our patterns show HTMX + Qute + Quarkus wired
+together (e.g., `@CheckedTemplate` fragments for HTMX, `HX-Request` header detection,
+`@ServerExceptionMapper` returning error fragments).
+
+**2. Qute + HTMX integration patterns.** Fragment-based HTMX responses, click-to-edit with
+Qute templates, search/filter with debounce, infinite scroll — all with both the HTML
+template and the Java endpoint shown together. b6k-dev's templates module covers Qute
+in isolation.
+
+**3. Anti-patterns document.** No other skill has this. The 7 anti-patterns (JSON instead
+of HTML, SPA state, full layout in fragment, no history, polling abuse, validation redirect,
+not using OOB) are the highest-value content in the skill.
+
+**4. Testing reference.** Dedicated file covering `@QuarkusTest`, `@TestProfile`,
+`@TestTransaction`, `@InjectMock`, DevServices, Testcontainers, and test fixtures.
+b6k-dev mentions testing in gotchas but has no dedicated module.
+
+**5. Flyway migrations.** Naming conventions, example migrations, config properties.
+b6k-dev has a `data-migrations` module but our coverage is comparable.
+
+### New gaps identified (vs. b6k-dev)
+
+| Gap | b6k-dev coverage | Priority | Recommendation |
+|---|---|---|---|
+| **Decision tree in SKILL.md** | Full router pattern | HIGH | Add a decision tree to SKILL.md to route to reference files |
+| **Gotchas as structured tables** | Per-module `Symptom/Cause/Fix` tables | HIGH | Convert prose gotchas to table format |
+| **CDI/DI depth** | 8 patterns with code | HIGH | Expand CDI section — at minimum add constructor injection, `@All List<T>`, `@IfBuildProfile`, `@Lock` |
+| **Messaging/events** | 3 modules (CDI events, Vert.x, Kafka) | MEDIUM | Add at least CDI `@Observes` events — common in Quarkus apps |
+| **Configuration depth** | 8 patterns | MEDIUM | Already added `@ConfigMapping`; consider adding validation and expression fallbacks |
+| **Advanced ORM** | Multitenancy, caching, multiple PUs | LOW | Out of scope for typical HTMX app; link to Quarkus docs if needed |
+| **OpenAPI patterns** | Dedicated module | LOW | Add `@Operation`, `@Tag`, `@Schema` annotation examples to REST section |
+| **Multipart gotchas** | HTTP 413, temp file cleanup | LOW | Add to rest-and-htmx.md alongside existing upload pattern |
+| **Slash command** | `/quarkus <task>` | LOW | Would improve UX but requires Claude Code command integration |
+
+---
+
+## 10. Strengths Worth Preserving
+
+- **Anti-patterns document is exceptional.** No other skill in the ecosystem has this — including b6k-dev. It's the single most valuable file in this skill.
+- **HTMX + Qute + Quarkus wiring.** The integrated patterns (fragment responses, HX-Request detection, CSRF with Qute injection, error fragments via `@ServerExceptionMapper`) cannot be replicated by combining separate HTMX and Quarkus skills.
+- **Progressive disclosure is textbook.** The SKILL.md is lean (~120 lines), reference files are loaded on-demand.
+- **Dual Panache patterns.** Showing both Active Record and Repository with guidance on when to use each is valuable.
 - **Validation script.** Having automated validation is rare in community skills. Extend it rather than replacing it.
-- **HTMX lifecycle events table.** Comprehensive and well-formatted — better than what ercan-er/htmx-claude-skill provides.
-- **Swap strategy and trigger modifier tables.** These are reference-quality and match the official HTMX docs closely.
-- **Type-safe Qute templates.** `@CheckedTemplate` coverage with build-time validation is a production pattern that most Quarkus tutorials skip.
-- **This is the only Quarkus skill in the ecosystem.** No competitor exists. This gives it outsized value.
+- **HTMX reference tables.** Attribute cheat sheet (20+ attributes), swap strategies, trigger modifiers, event lifecycle, hx-sync strategies — reference-quality and match official HTMX docs.
+- **Type-safe Qute templates.** `@CheckedTemplate` + `{#fragment}` coverage with build-time validation is a production pattern most tutorials skip.
+- **Unique positioning.** b6k-dev covers Quarkus deeply but has no HTMX. ercan-er covers HTMX but has no Quarkus. This skill bridges both and is the only one doing so.
