@@ -1,5 +1,5 @@
 ---
-name: quarkus-htmx-qute
+name: quarkus-htmx
 description: >
   Expert Quarkus Java and HTMX developer skill. Use whenever the user works
   with a Quarkus backend with an HTMX front end -- REST endpoints
