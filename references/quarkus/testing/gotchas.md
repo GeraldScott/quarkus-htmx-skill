@@ -1,6 +1,16 @@
 # Quarkus Testing Gotchas
 
-Common testing pitfalls, symptoms, and fixes.
+Common testing pitfalls, symptoms, and fixes across all tiers of the testing pyramid.
+
+## Unit testing pitfalls
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Mockito `@InjectMocks` field is null | Missing `@ExtendWith(MockitoExtension.class)` on the test class | Add the extension or use `MockitoAnnotations.openMocks(this)` in `@BeforeEach` |
+| Constructor injection fails in test | Class has no no-arg constructor and `@InjectMocks` can't find matching mocks | Ensure all constructor params have corresponding `@Mock` fields |
+| Panache static methods throw errors in unit test | Panache requires the Quarkus runtime | Use `@QuarkusTest` for Panache entities, or extract logic into a service class that can be unit-tested |
+| `@QuarkusComponentTest` can't find bean | Bean class not on the component test's classpath scan | Add the component class explicitly via `@QuarkusComponentTest(value = MyBean.class)` |
+| `@ConfigProperty` is null in `@QuarkusComponentTest` | Config not set | Use `@TestConfigProperty(key = "...", value = "...")` on the test class |
 
 ## Test lifecycle and context
 
@@ -40,3 +50,30 @@ Common testing pitfalls, symptoms, and fixes.
 |---------|--------------|-----|
 | REST Assured targets wrong port | Quarkus test port differs from the default 8080 | Use `@TestHTTPEndpoint` or let Quarkus configure REST Assured automatically via `quarkus-junit5` |
 | JSON body assertion fails unexpectedly | Response shape changed or Jackson serialization differs from expectation | Log the response body with `.log().body()` before asserting |
+
+## E2E / Playwright pitfalls
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Playwright test fails with "element not found" | HTMX swap hasn't completed yet | Use `page.waitForSelector()` or `page.waitForResponse()` instead of fixed timeouts |
+| `hx-confirm` dialog blocks the test | Playwright doesn't auto-accept dialogs | Register `page.onDialog(dialog -> dialog.accept())` before the action that triggers the dialog |
+| Test passes locally but fails in CI | CI has no display server for the browser | Playwright runs headless by default; ensure Docker/CI has required system libraries |
+| OOB swap target not updated in assertions | Assertion runs before the secondary swap completes | Wait for the specific OOB target selector after the primary swap |
+| `@TestHTTPResource` URL is null | Missing `@QuarkusTest` annotation | `@TestHTTPResource` requires the Quarkus test framework to be active |
+
+## UAT / Cucumber pitfalls
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Step definitions not found | Glue package path doesn't match step definition package | Verify the `glue` path in `@CucumberOptions` matches the step class package |
+| Scenario isolation failure (data leaks) | Database state shared between scenarios | Use `@TestTransaction` or truncate tables in a `@Before` hook |
+| Feature file not found | Wrong path in `@CucumberOptions` | Use relative path from project root: `features = "src/test/resources/features"` |
+
+## Testing pyramid anti-patterns
+
+| Anti-pattern | Problem | Fix |
+|--------------|---------|-----|
+| Ice cream cone (mostly E2E, few unit tests) | Slow feedback, fragile tests, hard to debug failures | Push logic into testable services; cover with unit tests; use E2E only for critical paths |
+| Mocking everything in integration tests | Tests don't verify real behavior; refactors break tests | Use Dev Services for real backends; reserve mocks for external APIs |
+| No tests at all ("it works in dev mode") | Regressions caught late, no safety net for refactoring | Start with `@QuarkusTest` for endpoints, add unit tests for business logic |
+| Testing implementation details | Tests break on every refactor even when behavior is unchanged | Assert on observable behavior (HTTP responses, DOM content), not internal method calls |

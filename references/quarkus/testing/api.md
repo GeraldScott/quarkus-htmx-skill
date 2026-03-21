@@ -2,17 +2,47 @@
 
 ## Overview
 
-Quarkus provides a test framework that starts the full application context and supports CDI injection, HTTP testing, and Dev Services inside test classes.
+Quarkus provides a layered test framework supporting the full testing pyramid:
+unit tests, component tests, integration tests, end-to-end tests, and user
+acceptance tests. Choose the right tier based on what you need to verify.
 
-- Use `@QuarkusTest` for JVM-mode integration tests with full CDI and HTTP.
-- Use `@QuarkusIntegrationTest` for black-box testing against the packaged artifact (JAR or native).
-- Dev Services automatically provisions backing services (databases, brokers) during tests.
-- Test profiles allow per-test configuration overrides and CDI alternative selection.
+### Testing Pyramid (fastest to slowest)
+
+```
+            /  UAT  \          Fewest -- business-critical user journeys
+           /  E2E    \         Browser-based (Playwright) or black-box artifact
+          / Integration\       @QuarkusTest + REST Assured + Dev Services
+         /  Component   \      @QuarkusComponentTest (CDI only, no HTTP)
+        /   Unit Tests   \     Plain JUnit 5 + Mockito (no container)
+```
+
+| Tier | Annotation | Container | Speed | See |
+|------|-----------|-----------|-------|-----|
+| Unit | None (plain JUnit) | None | ~ms | `unit-testing.md` |
+| Component | `@QuarkusComponentTest` | CDI only | ~1s | `unit-testing.md` |
+| Integration | `@QuarkusTest` | Full app | ~5-15s first, ~ms hot | `patterns.md` |
+| E2E | `@QuarkusTest` + `@WithPlaywright` | Full app + browser | ~seconds | `e2e-testing.md` |
+| E2E (artifact) | `@QuarkusIntegrationTest` | Packaged JAR/native | ~seconds | `e2e-testing.md` |
+| UAT / BDD | Cucumber + Playwright | Full app + browser | ~seconds | `uat-testing.md` |
+
+### TDD Approach
+
+Follow **red-green-refactor** at every tier:
+
+1. **RED** -- Write a failing test that defines the expected behavior.
+2. **GREEN** -- Write the minimum production code to make the test pass.
+3. **REFACTOR** -- Clean up duplication in both test and production code.
+
+Use `./mvnw quarkus:dev` (continuous testing) or `./mvnw quarkus:test` for the
+fastest TDD feedback loop. Tests re-run automatically on save.
 
 ### General guidelines
 
-- Prefer `@QuarkusTest` integration tests over unit tests for most Quarkus code.
-- Only write unit tests when they are actually beneficial, for example methods with complex logic that can be tested in isolation.
+- **Unit tests first**: Start with plain JUnit + Mockito for business logic. No container overhead.
+- **Component tests** for CDI-dependent logic: Use `@QuarkusComponentTest` when you need interceptors or config injection but not the full application.
+- **Integration tests** for wiring and HTTP: Use `@QuarkusTest` + REST Assured for endpoint behavior with real Dev Services backends.
+- **E2E tests** for critical user flows: Use Playwright for browser-based HTMX interaction testing.
+- **UAT** for stakeholder-visible scenarios: Express acceptance criteria as Gherkin features or descriptive JUnit test names.
 - Use `@InjectMock` sparingly; prefer real implementations backed by Dev Services.
 - Use test profiles when different tests need conflicting configuration.
 - Keep test classes in `src/test/java` with the same package structure as production code.
@@ -20,25 +50,45 @@ Quarkus provides a test framework that starts the full application context and s
 ## Extension entry points
 
 ```xml
+<!-- Integration testing (full app) -->
 <dependency>
     <groupId>io.quarkus</groupId>
     <artifactId>quarkus-junit5</artifactId>
     <scope>test</scope>
 </dependency>
 
+<!-- HTTP assertions -->
 <dependency>
     <groupId>io.rest-assured</groupId>
     <artifactId>rest-assured</artifactId>
     <scope>test</scope>
 </dependency>
-```
 
-For mocking support:
-
-```xml
+<!-- Mocking (works with @QuarkusTest and @QuarkusComponentTest) -->
 <dependency>
     <groupId>io.quarkus</groupId>
     <artifactId>quarkus-junit5-mockito</artifactId>
+    <scope>test</scope>
+</dependency>
+
+<!-- Component testing (lightweight CDI, no full app) -->
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-junit5-component</artifactId>
+    <scope>test</scope>
+</dependency>
+
+<!-- Browser E2E testing -->
+<dependency>
+    <groupId>io.quarkiverse.playwright</groupId>
+    <artifactId>quarkus-playwright</artifactId>
+    <scope>test</scope>
+</dependency>
+
+<!-- BDD / Cucumber (UAT) -->
+<dependency>
+    <groupId>io.quarkiverse.cucumber</groupId>
+    <artifactId>quarkus-cucumber</artifactId>
     <scope>test</scope>
 </dependency>
 ```
@@ -66,6 +116,42 @@ class GreetingResourceTest {
     }
 }
 ```
+
+## `@QuarkusComponentTest`
+
+Lightweight CDI-only testing without starting the full application. Faster than
+`@QuarkusTest`, suitable for testing service-layer beans with their CDI wiring:
+
+```java
+import io.quarkus.test.component.QuarkusComponentTest;
+import io.quarkus.test.component.TestConfigProperty;
+import io.quarkus.test.InjectMock;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+@QuarkusComponentTest
+@TestConfigProperty(key = "greeting.prefix", value = "Hello")
+class GreetingServiceTest {
+
+    @Inject
+    GreetingService service;
+
+    @InjectMock
+    UserRepository userRepo;
+
+    @Test
+    void greet_returnsPersonalizedGreeting() {
+        Mockito.when(userRepo.findByName("Ada")).thenReturn(new User("Ada"));
+        assertEquals("Hello, Ada!", service.greet("Ada"));
+    }
+}
+```
+
+Supports `@Nested` test classes, method parameter injection, and `@TestConfigProperty`.
+See `unit-testing.md` for detailed patterns and guidance on when to use this vs plain JUnit.
 
 ## `@QuarkusIntegrationTest`
 

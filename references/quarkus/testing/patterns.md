@@ -1,6 +1,9 @@
 # Quarkus Testing Usage Patterns
 
-Use these patterns for repeatable testing workflows.
+Use these patterns for repeatable testing workflows. See also:
+- `unit-testing.md` -- pure unit tests, `@QuarkusComponentTest`, TDD workflow
+- `e2e-testing.md` -- Playwright browser tests, `@QuarkusIntegrationTest`
+- `uat-testing.md` -- Cucumber/Gherkin BDD, acceptance criteria as tests
 
 ## Pattern: Integration Test with REST Assured and Dev Services
 
@@ -322,3 +325,102 @@ Key points for HTMX endpoint testing:
 - Use `application/x-www-form-urlencoded` content type with `formParam()` for HTMX form submissions.
 - Assert on HTML content using `containsString()` for fragment content validation.
 - Test both successful responses and empty responses (for delete operations with `outerHTML` swap).
+
+## Pattern: TDD with Continuous Testing
+
+When to use:
+
+- You are actively developing a feature and want sub-second feedback on every save.
+
+### Start continuous testing in Dev Mode
+
+```bash
+./mvnw quarkus:dev
+# Press 'r' in the console to run all tests
+# Tests re-run automatically on file save
+```
+
+### Start continuous testing standalone (no Dev UI)
+
+```bash
+./mvnw quarkus:test
+# Useful when Dev Mode interferes (e.g., WireMock port conflict)
+```
+
+### Configure which tests run in continuous testing
+
+```properties
+# Run only fast tests (unit + component) during development
+quarkus.test.continuous-testing=enabled
+quarkus.test.include-pattern=.*UnitTest|.*ComponentTest
+
+# Exclude slow E2E tests from continuous testing
+quarkus.test.exclude-pattern=.*E2ETest|.*IT|.*AcceptanceTest
+```
+
+### TDD inner loop
+
+1. Write a failing test (unit or integration).
+2. Save the file -- continuous testing runs automatically.
+3. See the red result in the console.
+4. Write the minimum code to pass.
+5. Save -- see the green result.
+6. Refactor -- save -- confirm still green.
+
+## Pattern: Test Organization by Tier
+
+When to use:
+
+- You want a clear separation between test tiers for selective execution.
+
+### Directory structure
+
+```
+src/test/java/com/example/
+  service/                        # Unit tests (plain JUnit + Mockito)
+    PricingServiceTest.java
+    OrderValidatorTest.java
+  component/                      # @QuarkusComponentTest
+    GreetingServiceComponentTest.java
+  resource/                       # @QuarkusTest + REST Assured
+    FruitResourceTest.java
+    ProductUiResourceTest.java
+  e2e/                            # @QuarkusTest + @WithPlaywright
+    TodoE2ETest.java
+  acceptance/                     # UAT / Cucumber
+    TodoAcceptanceTest.java
+  it/                             # @QuarkusIntegrationTest
+    ApplicationIT.java
+src/test/resources/
+  features/                       # Gherkin feature files
+    todo-management.feature
+```
+
+### Maven Surefire/Failsafe configuration for tiered execution
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <!-- Unit + integration tests run with `mvn test` -->
+        <excludes>
+            <exclude>**/*IT.java</exclude>
+            <exclude>**/*E2ETest.java</exclude>
+            <exclude>**/*AcceptanceTest.java</exclude>
+        </excludes>
+    </configuration>
+</plugin>
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-failsafe-plugin</artifactId>
+    <configuration>
+        <!-- E2E + UAT + integration tests run with `mvn verify` -->
+        <includes>
+            <include>**/*IT.java</include>
+            <include>**/*E2ETest.java</include>
+            <include>**/*AcceptanceTest.java</include>
+        </includes>
+    </configuration>
+</plugin>
+```

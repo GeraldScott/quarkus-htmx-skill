@@ -61,6 +61,11 @@ profile-specific overrides via `%dev.`, `%test.`, `%prod.` prefixes. Avoid
 **Minimal extension footprint.** Start with the smallest extension set; add only what the
 feature needs. Align all versions through the Quarkus platform BOM.
 
+**Test-driven by default.** Follow the testing pyramid: unit tests (fast, many) at the base,
+`@QuarkusTest` integration tests in the middle, Playwright E2E and Cucumber UAT at the top
+(slow, few). Use constructor injection to keep services unit-testable. Use `./mvnw quarkus:dev`
+continuous testing for red-green-refactor TDD. See `references/quarkus/testing/` for all tiers.
+
 ---
 
 ## Decision Tree
@@ -122,8 +127,17 @@ What do you need?
 +-- Authentication, authorization, RBAC, IDOR, security headers
 |   +-- references/quarkus/security/
 |
-+-- Testing (@QuarkusTest, mocking, test profiles, Dev Services)
-|   +-- references/quarkus/testing/
++-- Testing (TDD, testing pyramid, all tiers)
+|   +-- Unit tests (JUnit 5 + Mockito, @QuarkusComponentTest)
+|   |   +-- references/quarkus/testing/unit-testing.md
+|   +-- Integration tests (@QuarkusTest, REST Assured, Dev Services)
+|   |   +-- references/quarkus/testing/api.md, patterns.md
+|   +-- End-to-end tests (Playwright, @QuarkusIntegrationTest)
+|   |   +-- references/quarkus/testing/e2e-testing.md
+|   +-- User acceptance tests (Cucumber/Gherkin, BDD)
+|   |   +-- references/quarkus/testing/uat-testing.md
+|   +-- Gotchas (all tiers)
+|       +-- references/quarkus/testing/gotchas.md
 |
 +-- Dev mode, CLI, build plugins, Dev Services
     +-- references/quarkus/tooling/
@@ -307,5 +321,5 @@ CREATE TABLE items (
 - `scheduler/` -- @Scheduled, cron, Quartz, programmatic scheduling
 - `vertx-event-bus/` -- @ConsumeEvent, EventBus, publish/subscribe
 - `security/` -- authentication, authorization, RBAC, IDOR, CSRF, security headers, OIDC
-- `testing/` -- @QuarkusTest, @InjectMock, Dev Services, HTMX endpoint tests
+- `testing/` -- Full testing pyramid: unit tests (JUnit+Mockito, @QuarkusComponentTest), integration (@QuarkusTest), E2E (Playwright), UAT (Cucumber/BDD), TDD workflow, continuous testing
 - `tooling/` -- CLI, Dev Mode, DevServices, build plugins, native compilation
