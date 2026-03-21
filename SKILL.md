@@ -79,6 +79,15 @@ What do you need?
 +-- HTMX + Quarkus server integration (fragments, headers, OOB, SSE)
 |   +-- references/htmx/server-patterns.md
 |
++-- HTMX error handling (4xx/5xx, network errors, toasts, response-targets)
+|   +-- references/htmx/error-handling.md
+|
++-- HTMX pagination (infinite scroll, click-to-load, page numbers, cursors)
+|   +-- references/htmx/pagination.md
+|
++-- HTMX accessibility (ARIA live regions, focus management, keyboard nav)
+|   +-- references/htmx/accessibility.md
+|
 +-- HTMX form validation (server + client)
 |   +-- references/htmx/validation.md
 |
@@ -93,6 +102,8 @@ What do you need?
 |
 +-- Qute templates, fragments, layouts, type-safe templates
 |   +-- references/quarkus/templates/
+|   +-- Internationalization (message bundles, locales, language switching)
+|       +-- references/quarkus/templates/i18n.md
 |
 +-- REST endpoints (JAX-RS, content negotiation, exception mapping)
 |   +-- references/quarkus/web-rest/
@@ -309,12 +320,15 @@ CREATE TABLE items (
 - `sync.md` -- hx-sync strategies for request coordination
 - `extensions.md` -- hx-ext, SSE, WebSockets, response-targets, idiomorph
 - `config.md` -- htmx.config options, 1.x vs 2.x differences
+- `error-handling.md` -- error events, htmx:beforeSwap routing, response-targets, error toasts, server error fragments
+- `pagination.md` -- infinite scroll, click-to-load, page numbers, cursor-based, filtered pagination
+- `accessibility.md` -- ARIA live regions, focus management, keyboard navigation, semantic HTML, a11y checklist
 
 ### Quarkus references (`references/quarkus/`)
 - `dependency-injection/` -- CDI/ArC scopes, qualifiers, producers, interceptors
 - `configuration/` -- @ConfigProperty, @ConfigMapping, profiles, source priority
 - `web-rest/` -- JAX-RS, RESTEasy, content negotiation, exception mapping, SSE
-- `templates/` -- Qute syntax, @CheckedTemplate, fragments, layouts, HTMX integration
+- `templates/` -- Qute syntax, @CheckedTemplate, fragments, layouts, HTMX integration, i18n message bundles
 - `data-panache/` -- PanacheEntity, PanacheRepository, queries, paging
 - `data-orm/` -- JPA entity mapping, transactions, schema generation
 - `data-orm-advanced/` -- multi-tenancy, caching, multiple persistence units
