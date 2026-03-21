@@ -306,7 +306,7 @@ The Qute coverage excels in the **HTMX integration patterns** -- click-to-edit, 
 ### P2 -- Medium (nice to have)
 
 9. **Add `hx-disinherit`, `hx-request`** to attributes.md.
-10. **Add `{#let}`, `{#eval}`, `orEmpty`** to templates/api.md.
+10. ~~**Add `{#let}`, `{#eval}`, `orEmpty`** to templates/api.md~~ -- **DONE.** `orEmpty` added in P1; `{#let}` and `{#eval}` added.
 11. ~~**Add logging patterns**~~ -- **DONE.** Covered in observability/api.md (JSON logging, log categories, correlation IDs).
 12. **Add native-image reference** (common failures, `@RegisterForReflection`, multi-stage Docker).
 13. **Consolidate OOB swap documentation** -- pick one canonical location and cross-reference from others.

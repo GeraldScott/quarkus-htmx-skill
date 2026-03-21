@@ -211,6 +211,14 @@ Expressions rooted at `item` and `tags` are validated at build time.
 {#switch user.role}
   {#case 'admin'}Admin dashboard{#case 'user'}User dashboard{/switch}
 
+{! Local variables with let (preferred over with) !}
+{#let fullName=person.firstName + ' ' + person.lastName}
+  <span>{fullName}</span>
+{/let}
+
+{! Dynamic template evaluation from a string !}
+{#eval myData.templateString name='Mia' /}
+
 {! Include another template !}
 {#include partials/nav.html /}
 
