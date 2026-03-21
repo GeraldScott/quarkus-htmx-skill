@@ -254,9 +254,9 @@ The Qute coverage excels in the **HTMX integration patterns** -- click-to-edit, 
 
 | Location | Issue | Severity |
 |----------|-------|----------|
-| SKILL.md:266 | `@Transactional(readOnly = true)` -- Jakarta Transactions has no `readOnly` attribute. This is a Spring-ism. Quarkus approach: use Hibernate `@QueryHint` or simply omit `@Transactional` for reads. | **ERROR** |
-| templates/api.md:194-196 | Loop metadata `{#if p_count == 0}first{/if}` -- `count` is the *total items* in the iteration, not the current index. The check for "first item" should be `{#if p_index == 0}`. | **ERROR** |
-| templates/patterns.md:308-314 | CSRF config uses `quarkus.http.csrf.enabled=true` and `quarkus.http.csrf.token-header-name` -- Quarkus CSRF uses the `quarkus-csrf-reactive` extension with keys under `quarkus.csrf-reactive.*`, not `quarkus.http.csrf.*`. | **ERROR** |
+| SKILL.md:266 | `@Transactional(readOnly = true)` -- Jakarta Transactions has no `readOnly` attribute. This is a Spring-ism. | ~~ERROR~~ **FIXED** |
+| templates/api.md:194-196 | Loop metadata `{#if p_count == 0}` -- `count` is total items, not current index. Should be `p_index == 0`. | ~~ERROR~~ **FIXED** |
+| templates/patterns.md:308-314 | CSRF config used `quarkus.http.csrf.*` instead of `quarkus.csrf-reactive.*`. | ~~ERROR~~ **FIXED** |
 | templates/api.md:71-74 | Fragment `$` naming conflates two behaviors: in `@Inject Template`, `$` maps to a file path separator; in `@CheckedTemplate`, `$` separates template name from fragment ID. The comment on `emails$welcome` ("templates/emails/welcome.html") may not be accurate for all contexts. | **MISLEADING** |
 | attributes.md:74 | `hx-history-elt` was removed/reworked in HTMX 2.x. If the skill targets 2.x, this should be noted as deprecated or 1.x-only. | **OUTDATED** |
 
@@ -281,22 +281,15 @@ The Qute coverage excels in the **HTMX integration patterns** -- click-to-edit, 
 
 ### P0 -- Critical (should fix before production use)
 
-1. **Add a `security/` module** under `references/quarkus/` covering:
-   - `@RolesAllowed`, `@Authenticated`, `@PermissionsAllowed`
-   - `SecurityIdentity` and programmatic security checks
-   - HTTP Security Policy in `application.properties`
-   - Form-based authentication pattern
-   - OIDC/Keycloak integration (DevServices for Keycloak)
-   - JWT verification with SmallRye JWT
-   - Security testing with `@TestSecurity`
+1. ~~**Add a `security/` module** under `references/quarkus/`~~ -- **DONE.** Added `references/quarkus/security/` with api.md (OIDC, form auth, `SecurityIdentity`, `@RolesAllowed`, HTTP policy, security headers, CORS, `@TestSecurity`), patterns.md, and gotchas.md.
 
-2. **Add `hx-params` to attributes.md** -- it's a core attribute used in nearly every non-trivial form.
+2. ~~**Add `hx-params` to attributes.md**~~ -- **DONE.** Added with all four modes (`*`, `none`, include list, `not` exclude).
 
-3. **Fix `@Transactional(readOnly = true)`** in SKILL.md -- this is not a standard Jakarta Transactions attribute. Either remove or clarify the Hibernate-specific approach.
+3. ~~**Fix `@Transactional(readOnly = true)`** in SKILL.md~~ -- **DONE.** Replaced with correct Quarkus guidance: omit `@Transactional` on read-only methods.
 
-4. **Fix loop metadata error** in templates/api.md -- `p_count` is total items, not current index. The "first item" check should use `p_index == 0`, not `p_count == 0`.
+4. ~~**Fix loop metadata error** in templates/api.md~~ -- **DONE.** Changed `p_count == 0` to `p_index == 0`; clarified `p_count` = total items.
 
-5. **Fix CSRF config property names** in templates/patterns.md -- use `quarkus.csrf-reactive.*` not `quarkus.http.csrf.*`.
+5. ~~**Fix CSRF config property names** in templates/patterns.md~~ -- **DONE.** Changed to `quarkus.csrf-reactive.*`.
 
 ### P1 -- High (significant value add)
 

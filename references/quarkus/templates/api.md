@@ -193,8 +193,8 @@ Expressions rooted at `item` and `tags` are validated at build time.
 
 {! Loop metadata !}
 {#for p in products}
-  {#if p_count == 0}first{/if}
-  {p_index}: {p.name}   {! 0-based index !}
+  {#if p_index == 0}first{/if}
+  {p_index}: {p.name}   {! 0-based index; p_count = total items !}
 {/for}
 
 {! Include another template !}

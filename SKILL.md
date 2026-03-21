@@ -282,7 +282,7 @@ CREATE TABLE items (
 
 ## Common Quarkus Gotchas
 
-- **Transactional boundaries** -- `@Transactional` works on CDI beans; prefer on service methods, not resources. Use `@Transactional(readOnly = true)` for reads.
+- **Transactional boundaries** -- `@Transactional` works on CDI beans; prefer on service methods, not resources. Omit `@Transactional` on read-only methods; Quarkus handles reads without an explicit transaction.
 - **Reactive vs. imperative** -- `quarkus-rest` (formerly `resteasy-reactive`) handles both; blocking methods use the worker pool automatically. Don't mix `resteasy` and `rest` extensions.
 - **Static resources** -- place under `src/main/resources/META-INF/resources/` (maps to web root).
 - **Configuration secrets** -- use `${ENV_VAR}` placeholders; never hardcode credentials. `.env` files are picked up by Dev Mode.

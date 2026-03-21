@@ -101,5 +101,6 @@ to update `<head>` elements (title, CSS) on navigation.
 - `hx-validate="true"` -- trigger HTML5 validation before request
 - `hx-encoding="multipart/form-data"` -- for file uploads
 - `hx-on:event="handler"` -- inline event handler (HTMX 2.x)
+- `hx-params="*"` -- filter which params are submitted: `*` (all, default), `none`, comma-separated include list, or `not field1,field2` to exclude
 
 Use attributes before writing JavaScript.
