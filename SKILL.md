@@ -139,6 +139,9 @@ What do you need?
 |   +-- Gotchas (all tiers)
 |       +-- references/quarkus/testing/gotchas.md
 |
++-- Observability (health checks, metrics, tracing, logging)
+|   +-- references/quarkus/observability/
+|
 +-- Dev mode, CLI, build plugins, Dev Services
     +-- references/quarkus/tooling/
 ```
@@ -321,5 +324,6 @@ CREATE TABLE items (
 - `scheduler/` -- @Scheduled, cron, Quartz, programmatic scheduling
 - `vertx-event-bus/` -- @ConsumeEvent, EventBus, publish/subscribe
 - `security/` -- authentication, authorization, RBAC, IDOR, CSRF, security headers, OIDC
+- `observability/` -- SmallRye Health, Micrometer metrics, OpenTelemetry tracing, structured logging
 - `testing/` -- Full testing pyramid: unit tests (JUnit+Mockito, @QuarkusComponentTest), integration (@QuarkusTest), E2E (Playwright), UAT (Cucumber/BDD), TDD workflow, continuous testing
 - `tooling/` -- CLI, Dev Mode, DevServices, build plugins, native compilation

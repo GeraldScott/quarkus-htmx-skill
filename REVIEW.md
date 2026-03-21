@@ -293,21 +293,21 @@ The Qute coverage excels in the **HTMX integration patterns** -- click-to-edit, 
 
 ### P1 -- High (significant value add)
 
-4. **Add `{#when}`/`{#switch}` and `@TemplateGlobal` to templates/api.md** -- these are commonly needed Qute features.
+6. ~~**Add `{#when}`/`{#switch}` and `@TemplateGlobal` to templates/api.md**~~ -- **DONE.** Added `{#when}`/`{#switch}` section with enum matching examples, `@TemplateGlobal` with `global:` namespace, and `orEmpty` built-in.
 
-5. **Add an `observability/` module** covering SmallRye Health, Micrometer metrics, and OpenTelemetry basics.
+7. ~~**Add an `observability/` module**~~ -- **DONE.** Created `references/quarkus/observability/api.md` covering SmallRye Health (`@Liveness`, `@Readiness`, `@Startup`), Micrometer metrics (programmatic + annotation-based), OpenTelemetry tracing (`@WithSpan`, OTLP config), structured JSON logging, correlation IDs, and Kubernetes probe integration.
 
-6. **Add patterns.md and gotchas.md to the 9 modules that only have api.md** -- or document the intentional asymmetry. The inconsistency makes it look incomplete.
+8. ~~**Add patterns.md and gotchas.md to the 9 modules that only have api.md**~~ -- **ALREADY DONE.** Review error: all modules already had all three files.
 
-7. **Document the HTMX 2.x DELETE body change** in config.md's migration table.
+9. ~~**Document the HTMX 2.x DELETE body change**~~ -- **DONE.** Added to config.md migration table along with `scrollBehavior` change and `htmx-1-compat` extension note.
 
-8. **Add Web Components/Shadow DOM note** to config.md or attributes.md.
+10. ~~**Add Web Components/Shadow DOM note**~~ -- **DONE.** Added to config.md 1.x vs 2.x table.
 
 ### P2 -- Medium (nice to have)
 
 9. **Add `hx-disinherit`, `hx-request`** to attributes.md.
 10. **Add `{#let}`, `{#eval}`, `orEmpty`** to templates/api.md.
-11. **Add logging patterns** (structured JSON logging, log categories, correlation IDs).
+11. ~~**Add logging patterns**~~ -- **DONE.** Covered in observability/api.md (JSON logging, log categories, correlation IDs).
 12. **Add native-image reference** (common failures, `@RegisterForReflection`, multi-stage Docker).
 13. **Consolidate OOB swap documentation** -- pick one canonical location and cross-reference from others.
 14. **Add `allowed-tools` to frontmatter** for explicit tool permissions.

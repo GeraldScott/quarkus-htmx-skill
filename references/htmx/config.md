@@ -61,10 +61,13 @@ htmx.config.defaultSwapStyle = 'outerHTML';
 |---------|-----|-----|
 | `selfRequestsOnly` | `false` | `true` (security) |
 | `allowScriptTags` | `true` | `false` (security) |
+| `scrollBehavior` | `smooth` | `instant` |
 | `textContent` swap | Not available | Available |
 | `hx-on` syntax | `hx-on="event: handler"` | `hx-on:event="handler"` |
+| DELETE request body | Form-encoded body | URL parameters (per spec) |
 | Extensions | Bundled | Separate packages (`htmx-ext-*`) |
 | `revealed` trigger | Supported | Deprecated (use `intersect`) |
+| Web Components | Limited | Shadow DOM support (`htmx.process()`) |
 | IE11 support | Yes | No |
 
 When migrating from 1.x to 2.x:
@@ -73,3 +76,5 @@ When migrating from 1.x to 2.x:
 3. Replace `revealed` with `intersect`
 4. Review `selfRequestsOnly` if you use cross-origin requests
 5. Review `allowScriptTags` if responses contain `<script>` tags
+6. Update DELETE handlers -- parameters now come via URL, not request body
+7. Use `htmx-ext-htmx-1-compat` extension for incremental migration (restores 1.x defaults)

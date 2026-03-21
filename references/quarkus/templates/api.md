@@ -197,6 +197,20 @@ Expressions rooted at `item` and `tags` are validated at build time.
   {p_index}: {p.name}   {! 0-based index; p_count = total items !}
 {/for}
 
+{! When/switch -- pattern matching for values and enums !}
+{#when item.status}
+  {#is ACTIVE}
+    <span class="badge-green">Active</span>
+  {#is in EXPIRED CANCELLED}
+    <span class="badge-red">Inactive</span>
+  {#else}
+    <span class="badge-grey">Unknown</span>
+{/when}
+
+{! Switch is an alias for when; case is an alias for is !}
+{#switch user.role}
+  {#case 'admin'}Admin dashboard{#case 'user'}User dashboard{/switch}
+
 {! Include another template !}
 {#include partials/nav.html /}
 
@@ -212,8 +226,9 @@ Expressions rooted at `item` and `tags` are validated at build time.
 
 Useful built-ins:
 
-- Elvis/default: `{item.name ?: 'Unknown'}`
+- Elvis/default: `{item.name ?: 'Unknown'}` or `{item.name.or('Unknown')}`
 - Ternary: `{item.inStock ? 'yes' : 'no'}`
+- Safe empty iteration: `{items.orEmpty.size}` (returns empty list instead of null)
 - Current data namespace: `{data:item.name}`
 - Raw output: `{htmlSnippet.raw}`
 
@@ -362,6 +377,36 @@ Template use:
 ```
 
 These generated resolvers are native-friendly and avoid reflection.
+
+## Global variables with `@TemplateGlobal`
+
+Define variables accessible in every template without passing them via `.data()`:
+
+```java
+import io.quarkus.qute.TemplateGlobal;
+
+@TemplateGlobal
+public class Globals {
+
+    static String appName = "My App";
+
+    static String currentUser() {
+        // resolve from SecurityIdentity or session
+        return getCurrentUsername();
+    }
+}
+```
+
+Template use:
+
+```html
+<title>{appName}</title>
+<span>Welcome, {currentUser}</span>
+{! Or use the global: namespace explicitly !}
+<footer>{global:appName} v1.0</footer>
+```
+
+Global variables are accessible by method/field name or via the `global:` namespace.
 
 ## Inject beans directly in templates
 
